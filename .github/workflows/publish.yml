@@ -1,0 +1,79 @@
+name: Validate or publish release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Exact package version, without v (e.g. 0.1.1)'
+        required: true
+        type: string
+      publish:
+        description: 'Publish to npm and create a GitHub Release after environment approval'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: repfix-publishing
+  cancel-in-progress: false
+jobs:
+  validate:
+    # Dry runs can validate a release PR. Real publication is restricted to main.
+    if: ${{ !inputs.publish || github.ref == 'refs/heads/main' }}
+    uses: ./.github/workflows/ci.yml
+  package:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: npm-package-${{ github.run_id }}
+          path: ${{ runner.temp }}/repfix-package
+      - name: Verify version, changelog and the tested archive
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          ARTIFACT_DIR: ${{ runner.temp }}/repfix-package
+        run: |
+          node scripts/verify-release.mjs "$RELEASE_VERSION" "$ARTIFACT_DIR"
+          npm publish "$ARTIFACT_DIR/repfix-$RELEASE_VERSION.tgz" --dry-run --ignore-scripts --access public
+  publish:
+    if: inputs.publish && github.ref == 'refs/heads/main'
+    needs: [validate, package]
+    environment: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Require an npm version with Trusted Publishing support
+        run: |
+          node --input-type=module -e 'import { execFileSync } from "node:child_process"; const [major, minor, patch] = execFileSync("npm", ["--version"], { encoding: "utf8" }).trim().split(".").map(Number); if (!(major > 11 || (major === 11 && (minor > 5 || (minor === 5 && patch >= 1))))) throw new Error("npm >= 11.5.1 is required");'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: npm-package-${{ github.run_id }}
+          path: ${{ runner.temp }}/repfix-package
+      - name: Publish the tested archive, then create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          ARTIFACT_DIR: ${{ runner.temp }}/repfix-package
+          REPFIX_PUBLISH_APPROVED: 'true'
+        run: node scripts/publish-release.mjs

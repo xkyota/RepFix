@@ -1,0 +1,35 @@
+name: Prepare release PR
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
+        with:
+          # A merged version PR must never publish or tag automatically.
+          skip-github-release: true
+      - name: Run CI on the generated PR
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_PR: ${{ steps.release.outputs.pr }}
+        # GITHUB_TOKEN-created PRs do not emit another pull_request workflow event.
+        run: |
+          branch=$(jq -r '.headBranchName' <<< "$RELEASE_PR")
+          test -n "$branch" && test "$branch" != null
+          gh workflow run ci.yml --ref "$branch"

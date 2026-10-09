@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readFile } from 'node:fs/promises';
 import { install } from './install.js';
 import { detect } from './detect.js';
 import { clean } from './safety.js';
@@ -37,7 +38,11 @@ const allowed: Record<string, string[]> = {
 async function main(args: string[]): Promise<number> {
   const action = args.shift();
   if (!action || action === '--help' || action === 'help') { process.stdout.write(help); return 0; }
-  if (action === '--version') { process.stdout.write('0.1.0\n'); return 0; }
+  if (action === '--version') {
+    const { version } = JSON.parse(await readFile(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
+    process.stdout.write(`${version}\n`);
+    return 0;
+  }
   if (!allowed[action]) throw new Error(`Unknown action: ${action}`);
   const separator = args.indexOf('--');
   const argv = separator < 0 ? [] : args.slice(separator + 1);
