@@ -1,5 +1,8 @@
 # RepFix
 
+[![RepFix CI](https://github.com/xkyota/RepFix/actions/workflows/ci.yml/badge.svg)](https://github.com/xkyota/RepFix/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **Reproduce the bug. Fix the cause. Prove the result.**
 
 RepFix is an open-source debugging skill for **OpenAI Codex** and **Claude Code**. It guides the agent from a report, stack trace, failing test, or screenshot through reproduction, diagnosis, a minimal fix, and regression checks. Every claim is backed by local evidence.
@@ -119,7 +122,15 @@ npm pack                     # verify the distributable archive
 
 Core tests cover metadata discovery, real Node/Python RED → GREEN flows, execution approval gates, zero-test false positives, failure scenarios, preservation of staged/unstaged work, restricted modes, test tampering, stale evidence, timeouts, process cleanup, redaction, literal argv execution, path confinement, and installation in both host directories (including CommonJS projects). The browser test uses synthetic local content and requires Chromium; it fails rather than silently skipping when the browser is unavailable.
 
-The [GitHub Actions workflow](.github/workflows/ci.yml) runs the core suite on Node 22/24 and macOS/Linux with Python 3.12, plus Chromium on Linux. Jobs have ten-minute limits and read-only repository permissions. It becomes active when this change is pushed to GitHub; local test results do not establish that hosted CI has run.
+The [GitHub Actions workflow](.github/workflows/ci.yml) runs the core suite on Node 22/24 and macOS/Linux with Python 3.12, plus Chromium on Linux. Jobs have ten-minute limits and read-only repository permissions. Check the workflow run for a specific commit; local test results do not establish that hosted CI has run.
+
+Contributions are welcome. Read the [contribution guide](CONTRIBUTING.md), use the issue and pull request templates, and follow the [security policy](SECURITY.md) for private vulnerability reports. Maintainers create [releases](https://github.com/xkyota/RepFix/releases) after validating `main`; there is no automated npm publication.
+
+## Architecture
+
+[![Architecture diagram of xkyota/RepFix](https://gitdiagram.com/xkyota/repfix/diagram.png)](https://gitdiagram.com/xkyota/repfix?utm_source=readme&utm_medium=picture)
+
+The diagram is generated from the public repository. The component map below describes the maintained source layout.
 
 ```text
 skills/repfix/       Portable SKILL.md, references, Codex UI metadata
