@@ -6,7 +6,7 @@
 
 The generated CLI metadata reads the root package version during build, so npm, `repfix --version`, and installed skill copies agree. No runtime dependencies are added.
 
-GitHub must allow Actions to create pull requests (Settings → Actions → General). The preparation workflow uses the ephemeral `GITHUB_TOKEN`, with explicit permissions, and dispatches CI on the generated branch because a token-created PR does not trigger another `pull_request` workflow. No PAT is needed. `CI passed` should be required by branch protection; do not merge a version PR before it succeeds.
+GitHub must allow Actions to create pull requests (Settings → Actions → General). The preparation workflow uses the ephemeral `GITHUB_TOKEN` with explicit permissions. No PAT is needed. GitHub places workflows from token-created/updated PRs in an approval-required state. After inspecting the generated version/changelog diff, a maintainer selects **Approve workflows to run** in the PR merge box. This approves test execution only, not the PR or publication. The normal `pull_request` CI must pass before merging. `workflow_dispatch` checks do not satisfy required PR checks, so a green release dry run is not a substitute. `CI passed` and the existing core checks are required by the repository ruleset.
 
 ## One-time publishing setup
 
@@ -27,7 +27,7 @@ This runs the full Node 22/24/26 × Ubuntu/macOS core and Chromium matrix, build
 
 ## Publish after explicit owner approval
 
-1. Review and merge the green release PR. Publish from that exact main commit before merging other changes; the publication gate requires a merged release-please PR at the run's commit.
+1. Review the release PR, approve its CI workflow execution when GitHub requests it, and merge only after the required PR checks pass. Publish from that exact main commit before merging other changes; the publication gate requires a merged release-please PR at the run's commit.
 2. Manually run **Validate or publish release** on `main`, enter the version, and check **publish**. This repeats the full validation matrix. Starting it is a separate authorization from merging the version PR.
 3. Inspect the run's commit, version, package artifact and successful checks, then approve the **release** environment deployment. The workflow publishes the already tested tarball using npm OIDC and provenance, then creates the matching GitHub tag/Release and attaches the tarball. GitHub notes use the reviewed changelog entry. Release and publication use the run's immutable SHA, even if `main` subsequently advances.
 
@@ -41,4 +41,4 @@ If npm succeeded but GitHub release creation or labeling failed, re-run the fail
 
 After the release is complete, the next normal push (or a manual run of `Prepare release PR`) starts the next release proposal. No release PR is automatically merged.
 
-References: [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/), [release-please action](https://github.com/googleapis/release-please-action), [Dependabot options](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference).
+References: [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/), [release-please action](https://github.com/googleapis/release-please-action), [Dependabot options](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference), [bot PR workflow approval](https://github.blog/changelog/2026-06-11-bot-created-pull-requests-can-run-workflows-if-approved/), [required PR checks](https://docs.github.com/en/pull-requests/how-tos/merge-pull-requests/troubleshooting-required-status-checks).
