@@ -1,3 +1,4 @@
+import type { Detection } from './detect.js';
 export type Mode = 'auto' | 'diagnose-only' | 'verify-only';
 export type Phase = 'reproduce' | 'verify' | 'regression';
 export type Status = 'VERIFIED' | 'PARTIALLY_VERIFIED' | 'UNVERIFIED' | 'FAILED' | 'BLOCKED';
@@ -9,6 +10,7 @@ export interface Command {
   context: string; runtime: string;
   startedAt: string; durationMs: number; exitCode: number | null; signal: string | null;
   error?: string; timedOut: boolean; truncated: boolean; interrupted: boolean;
+  approval?: string; evidenceIssue?: string;
   before: string; after: string; oracles: Record<string, string>; log: string;
 }
 export interface Note { kind: NoteKind; text: string; evidence: string[] }
@@ -17,5 +19,6 @@ export interface Run {
   baseline: Snapshot; oracles: string[]; regressions: string[];
   commands: Command[]; artifacts: Artifact[]; notes: Note[];
   confirmations: { command: string; reason: string }[];
+  detection?: Detection;
 }
 export interface Assessment { status: Status; reasons: string[]; changedFiles: string[] }

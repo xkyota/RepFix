@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { install } from './install.js';
+import { detect } from './detect.js';
 import { clean } from './safety.js';
 import { recordCommand } from './runner.js';
 import { report } from './report.js';
@@ -8,9 +9,10 @@ import type { Mode, NoteKind, Phase } from './types.js';
 
 const help = `RepFix — evidence-first debugging (Node.js 22+)
 
+detect  [--project DIR] (read-only language/framework/test-runner hints)
 init    --project DIR --summary TEXT [--mode auto|diagnose-only|verify-only]
         [--oracle RELATIVE_FILE ...] [--regression NAME ...]
-run     --session DIR --phase reproduce|verify|regression --name NAME
+run     --session DIR --phase reproduce|verify|regression --name NAME --approval TEXT
         [--cwd RELATIVE_DIR] [--timeout MS] [--context TEXT] -- EXECUTABLE ARGS...
 confirm --session DIR --command ID --reason TEXT
 note    --session DIR --kind fact|assumption|root-cause|fix|limitation|test-change
@@ -25,8 +27,9 @@ report exit codes: 0 VERIFIED, 2 PARTIALLY_VERIFIED/UNVERIFIED, 1 FAILED, 3 BLOC
 Errors exit 3. See the bundled references/commands.md for full examples.
 `;
 const allowed: Record<string, string[]> = {
+  detect: ['project'],
   init: ['project', 'summary', 'mode', 'oracle', 'regression'],
-  run: ['session', 'phase', 'name', 'cwd', 'timeout', 'context'],
+  run: ['session', 'phase', 'name', 'cwd', 'timeout', 'context', 'approval'],
   confirm: ['session', 'command', 'reason'], note: ['session', 'kind', 'text', 'evidence'],
   attach: ['session', 'file', 'reviewed'], report: ['session', 'blocked'],
   install: ['target', 'scope', 'project'],
@@ -57,6 +60,7 @@ async function main(args: string[]): Promise<number> {
   };
   const many = (key: string): string[] => options.get(key) ?? [];
   const output = (value: unknown): void => { process.stdout.write(`${JSON.stringify(value)}\n`); };
+  if (action === 'detect') { output(await detect(optional('project', '.'))); return 0; }
   if (action === 'init') {
     const mode = optional('mode', 'auto');
     if (!['auto', 'diagnose-only', 'verify-only'].includes(mode)) throw new Error('Invalid mode');
@@ -74,13 +78,13 @@ async function main(args: string[]): Promise<number> {
       if (!Number.isSafeInteger(timeout) || timeout < 100 || timeout > 3_600_000) throw new Error('--timeout must be 100–3600000 milliseconds');
       const name = required('name');
       if (!/^[a-zA-Z0-9._-]+$/.test(name)) throw new Error('Invalid command name');
-      const c = await recordCommand(dir, run, phase as Phase, name, argv, optional('cwd', '.'), timeout, optional('context'));
-      output({ id: c.id, exitCode: c.exitCode, timedOut: c.timedOut, error: c.error, log: run.artifacts.find(a => a.id === c.log)?.file });
+      const c = await recordCommand(dir, run, phase as Phase, name, argv, optional('cwd', '.'), timeout, optional('context'), required('approval'));
+      output({ id: c.id, exitCode: c.exitCode, timedOut: c.timedOut, error: c.error, evidenceIssue: c.evidenceIssue, log: run.artifacts.find(a => a.id === c.log)?.file });
       return c.error || c.timedOut || c.interrupted || c.signal ? 3 : c.exitCode ?? 3;
     }
     if (action === 'confirm') {
       const c = run.commands.find(command => command.id === required('command'));
-      if (!c || c.phase !== 'reproduce' || c.exitCode === 0 || c.exitCode === null || c.error || c.timedOut || c.signal || c.interrupted || c.truncated || c.before !== c.after) {
+      if (!c || c.phase !== 'reproduce' || c.exitCode === 0 || c.exitCode === null || c.error || c.evidenceIssue || c.timedOut || c.signal || c.interrupted || c.truncated || c.before !== c.after) {
         throw new Error('Only a complete, stable, nonzero reproduction can be confirmed; infrastructure failures are blockers');
       }
       if ((await integrity(dir, run)).length || !(await artifactText(dir, run, c.log)).trim()) throw new Error('Reproduction evidence is missing, empty, or altered');

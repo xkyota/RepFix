@@ -8,7 +8,7 @@ test('real Chromium interaction: failure + screenshot/trace → fix → identica
   const root = await fixture(t, 'browser');
   await symlink(join(repo, 'node_modules'), join(root, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
   const session = invoke(['init', '--project', root, '--summary', 'Browser applies 10% when discount is zero', '--oracle', 'repro.mjs', '--regression', 'browser']);
-  const run = (phase, name, code) => JSON.parse(invoke(['run', '--session', session, '--phase', phase, '--name', name, '--context', 'chromium;1280x720;synthetic-static-fixture', '--', process.execPath, 'repro.mjs'], code));
+  const run = (phase, name, code) => JSON.parse(invoke(['run', '--session', session, '--phase', phase, '--name', name, '--approval', 'Reviewed synthetic local browser fixture; tests authorized', '--context', 'chromium;1280x720;synthetic-static-fixture', '--', process.execPath, 'repro.mjs'], code));
   const reproduction = run('reproduce', 'zero-discount', 1);
   assert.equal(reproduction.id, 'c1');
   assert.match(await readFile(join(session, reproduction.log), 'utf8'), /An explicit zero discount must preserve the price/);
@@ -25,7 +25,7 @@ test('real Chromium interaction: failure + screenshot/trace → fix → identica
   // A separate regression checks nonzero input, using a script saved outside project fingerprints.
   const regression = (await readFile(join(root, 'repro.mjs'), 'utf8')).replace("fill('0')", "fill('0.2')").replace("assert.equal(total, '$100'", "assert.equal(total, '$80'").replace('PASS: zero discount preserves $100', 'PASS: positive discount produces $80');
   await writeFile(join(root, '.repfix/positive.mjs'), regression);
-  invoke(['run', '--session', session, '--phase', 'regression', '--name', 'browser', '--', process.execPath, '.repfix/positive.mjs']);
+  invoke(['run', '--session', session, '--phase', 'regression', '--name', 'browser', '--approval', 'Reviewed synthetic local browser regression; tests authorized', '--', process.execPath, '.repfix/positive.mjs']);
   const result = JSON.parse(invoke(['report', '--session', session]));
   assert.equal(result.status, 'VERIFIED');
   assert.deepEqual(result.changedFiles, ['index.html']);

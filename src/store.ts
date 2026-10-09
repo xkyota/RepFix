@@ -3,6 +3,7 @@ import { mkdir, open, readFile, realpath, rename, rm, writeFile } from 'node:fs/
 import { basename, join, relative, resolve } from 'node:path';
 import { boundedRead, clean, hash, inside, noLinks, projectFile } from './safety.js';
 import { gitEvidence, snapshot } from './snapshot.js';
+import { detect } from './detect.js';
 import type { Artifact, Mode, Run } from './types.js';
 
 export async function save(runDir: string, run: Run): Promise<void> {
@@ -37,6 +38,7 @@ export async function init(rootPath: string, mode: Mode, summary: string, oracle
   const run: Run = {
     version: 1, id, root, mode, summary: clean(summary), createdAt: new Date().toISOString(),
     baseline, oracles, regressions: [...new Set(regressions)], commands: [], artifacts: [], notes: [], confirmations: [],
+    detection: await detect(root, Object.keys(baseline.files)),
   };
   await addArtifact(dir, run, clean(gitEvidence(root)), 'baseline-git', 'txt');
   await save(dir, run);

@@ -7,6 +7,7 @@ Check the existing package scripts and Playwright configuration before adapting 
 ```sh
 # With REPFIX and SESSION set as in commands.md:
 node "$REPFIX" run --session "$SESSION" --phase reproduce --name checkout \
+  --approval "Reviewed local browser test; user authorized the repair and tests" \
   --context "chromium;1280x720;seed-v1" \
   -- node node_modules/@playwright/test/cli.js test tests/checkout.spec.ts \
   --project chromium --workers 1 --retries 0 --trace on \

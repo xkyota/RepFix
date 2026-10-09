@@ -93,7 +93,7 @@ test('changed environment and context cannot verify the same scenario', async t 
 
 test('spawn failures and timeouts are blockers, never confirmed reproductions', async t => {
   const root = await fixture(t), session = start(root);
-  invoke(['run', '--session', session, '--phase', 'reproduce', '--name', 'missing', '--', 'repfix-command-that-does-not-exist'], 3);
+  invoke(['run', '--session', session, '--phase', 'reproduce', '--name', 'missing', '--approval', 'Authorized missing-executable fixture', '--', 'repfix-command-that-does-not-exist'], 3);
   invoke(['confirm', '--session', session, '--command', 'c1', '--reason', 'not a bug'], 3);
   command(session, 'reproduce', 3, ['-e', 'setInterval(()=>{}, 1000)'], 'timeout', ['--timeout', '100']);
   assert.equal(JSON.parse(invoke(['report', '--session', session], 3)).status, 'BLOCKED');

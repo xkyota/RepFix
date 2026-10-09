@@ -22,7 +22,7 @@ export function start(root, extra = []) {
   return invoke(['init', '--project', root, '--summary', 'Zero discount produces 90 instead of 100', '--oracle', 'discount.test.mjs', '--regression', 'unit', ...extra]);
 }
 export function command(session, phase, expected = 0, args = ['--test', 'discount.test.mjs'], name = 'original', extra = []) {
-  const output = invoke(['run', '--session', session, '--phase', phase, '--name', name, ...extra, '--', process.execPath, ...args], expected);
+  const output = invoke(['run', '--session', session, '--phase', phase, '--name', name, '--approval', 'Reviewed trusted local fixture; repository test execution is authorized', ...extra, '--', process.execPath, ...args], expected);
   return output ? JSON.parse(output) : undefined;
 }
 export function confirm(session, id = 'c1') {

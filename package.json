@@ -7,7 +7,7 @@
   "repository": "github:xkyota/RepFix",
   "engines": { "node": ">=22" },
   "bin": { "repfix": "skills/repfix/scripts/cli.js" },
-  "files": ["skills/repfix", "README.md", "LICENSE"],
+  "files": ["skills/repfix", "README.md", "LICENSE", "docs/design.md"],
   "scripts": {
     "build": "tsc && node scripts/package-skill.mjs",
     "typecheck": "tsc --noEmit",

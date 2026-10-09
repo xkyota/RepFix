@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { lstat, realpath, readFile } from 'node:fs/promises';
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 
 export const hash = (value: string | Buffer): string => createHash('sha256').update(value).digest('hex');
 export function inside(root: string, path: string): string {
@@ -52,3 +52,36 @@ export function cleanArgs(argv: string[]): string[] {
   return argv.map((arg, index) => index > 0 && /^--?[\w-]*(?:token|secret|password|api-key|credential)$/i.test(argv[index - 1]!) ? '[REDACTED]' : clean(arg));
 }
 export const testFile = (path: string): boolean => /(^|\/)(__tests__|tests?|e2e)(\/|$)|\.(test|spec)\.[^/]+$|(^|\/)(jest|vitest|playwright)\.config\./i.test(path);
+
+// A review checkpoint, not a sandbox or an exhaustive command classifier.
+// Project tests themselves are arbitrary code; host permissions remain required.
+export function approveCommand(argv: string[], approval: string): string {
+  if (!approval.trim() || approval.length > 1000) throw new Error('Execution requires --approval TEXT recording command review and existing authorization. Ask before untrusted commands or dependency installation.');
+  const executable = basename(argv[0] ?? '').toLowerCase().replace(/\.(exe|cmd|bat)$/, '');
+  const args = argv.slice(1);
+  if (['rm', 'rmdir', 'del', 'erase', 'format', 'mkfs', 'dd', 'shred', 'sudo', 'doas', 'sh', 'bash', 'zsh', 'fish', 'cmd', 'powershell', 'pwsh'].includes(executable)
+    || (executable === 'git' && args.some(arg => ['reset', 'clean', 'checkout', 'restore', 'push'].includes(arg)))) {
+    throw new Error('Destructive commands and shell wrappers are not accepted by the evidence runner. Use reviewed test executables directly.');
+  }
+  if ((['npm', 'pnpm', 'yarn', 'bun'].includes(executable) && args.some(arg => ['install', 'i', 'ci', 'add', 'update', 'upgrade', 'dlx', 'rebuild'].includes(arg)))
+    || executable === 'npx' || executable === 'bunx'
+    || (['pip', 'pip3', 'uv', 'poetry', 'pipenv'].includes(executable) && args.some(arg => ['install', 'add', 'sync', 'update'].includes(arg)))
+    || (/^python[\d.]*$/.test(executable) && args.includes('pip') && args.includes('install'))) {
+    throw new Error('Dependency setup is separate from verification. Obtain explicit user approval and use the host tools to install dependencies.');
+  }
+  return clean(approval);
+}
+
+export function evidenceIssue(output: string): string | undefined {
+  if (!output.trim()) return 'Command produced no observable output; inspect the test selection.';
+  const count = (name: string): number | undefined => {
+    const match = output.match(new RegExp(`^(?:#|ℹ)\\s+${name}\\s+(\\d+)\\s*$`, 'm'));
+    return match ? Number(match[1]) : undefined;
+  };
+  if (count('tests') === 0 || (count('pass') === 0 && count('fail') === 0)
+    || /\bRan 0 tests\b|\bno tests ran\b|\bNo tests found\b/i.test(output)
+    || /\bOK \(skipped=(\d+)\)/.test(output) && output.match(/\bRan (\d+) tests?\b/)?.[1] === output.match(/\bOK \(skipped=(\d+)\)/)?.[1]) {
+    return 'Test runner reported no executed tests (empty selection or all skipped).';
+  }
+  return undefined;
+}

@@ -4,11 +4,15 @@ Requires Node.js 22+. The installed skill includes compiled JavaScript and needs
 
 ```sh
 REPFIX=/absolute/path/to/repfix/scripts/cli.js
+node "$REPFIX" detect --project .
+# Review the report, test command, hooks and local test setup. Record existing
+# authorization below; ask first if the command is untrusted or needs setup.
+APPROVAL="Reviewed local unit tests; user authorized this repair and its tests"
 SESSION=$(node "$REPFIX" init --project . --mode auto \
   --summary "Discount of zero is treated as missing" \
   --oracle test/discount.test.mjs --regression unit)
 
-node "$REPFIX" run --session "$SESSION" --phase reproduce --name original \
+node "$REPFIX" run --session "$SESSION" --phase reproduce --name original --approval "$APPROVAL" \
   -- node --test test/discount.test.mjs
 # Expected nonzero exit: inspect the log identified in the JSON output.
 # Do not use shell `set -e` around an expected failing reproduction.
@@ -18,16 +22,18 @@ node "$REPFIX" note --session "$SESSION" --kind root-cause --evidence c1 \
   --text "discount.mjs:2 uses ||, replacing valid zero with the fallback"
 
 # Agent applies the minimal source fix, preserving the original assertion.
-node "$REPFIX" run --session "$SESSION" --phase verify --name original \
+node "$REPFIX" run --session "$SESSION" --phase verify --name original --approval "$APPROVAL" \
   -- node --test test/discount.test.mjs
-node "$REPFIX" run --session "$SESSION" --phase regression --name unit \
+node "$REPFIX" run --session "$SESSION" --phase regression --name unit --approval "$APPROVAL" \
   -- node --test test/discount.test.mjs test/default.test.mjs
 node "$REPFIX" note --session "$SESSION" --kind fix --evidence c2 \
   --text "Changed the discount fallback from || to ?? to preserve zero"
 node "$REPFIX" report --session "$SESSION"
 ```
 
-These are argument arrays. Shell expansion, pipes, redirects, and inline environment assignments are not interpreted. For npm scripts, use `-- npm test -- --runInBand` as appropriate for the actual test runner. Prefer direct executable paths on Windows; `.cmd` shims require an explicitly reviewed shell invocation. Avoid shells when possible. Commands inherit the current environment; secret values and common token patterns are redacted from saved logs and command displays. The fingerprint hashes the original arguments and inherited environment (excluding volatile shell bookkeeping) so redaction does not affect scenario matching. Keep terminal/runtime environment stable across reproduction and verification.
+These are argument arrays. Shell expansion, pipes, redirects, and inline environment assignments are not interpreted. For npm scripts, use `-- npm test -- --runInBand` as appropriate for the actual test runner. The runner rejects shell wrappers, common destructive commands, and package installation commands. Use direct executable paths on Windows; `.cmd` shims are not supported. `--approval` is a review/authorization record, not a permission bypass or a security boundary. Review project scripts and hooks, and obtain explicit user approval for untrusted commands or dependency installation; perform approved setup separately with host tools. Commands inherit the current environment; secret values and common token patterns are redacted from saved logs and command displays. The fingerprint hashes the original arguments and inherited environment (excluding volatile shell bookkeeping) so redaction does not affect scenario matching. Keep terminal/runtime environment stable across reproduction and verification.
+
+`detect` reads bounded metadata for JavaScript/TypeScript (Node, Vitest, Jest, Mocha, Playwright), Python (pytest/unittest), Go and Rust. Framework hints include React, Next.js, Vue, Svelte, Express, NestJS, Django, FastAPI and Flask. It reads no more than 2,000 directory entries at four levels and 256 KiB per inspected file; it ignores dependency trees and symlinks. It never runs inferred commands. Candidates require review and may require dependencies. `init` saves detection using its existing snapshot file list; unknown environments still support manual command selection. Detection is heuristic, not a configuration parser or a monorepo planner.
 
 `--cwd` is relative to the project and cannot escape it. `--timeout` defaults to 120000 ms (allowed: 100–3600000). Use the same timeout for before/after. `--context` records a fingerprint of extra scenario information such as fixture revision, browser, viewport, or service version; pass exactly the same context on the rerun. Arguments or context should not contain credentials. RTK is optional for exploration and never required by the helper.
 
@@ -52,7 +58,7 @@ IDs are session-local and returned by each operation. Do not assume `a2` or `c1`
 
 ## Output and exit codes
 
-`init` prints an absolute session path. Other operations print compact JSON. `run` returns the child's exit code, or 3 for timeout/spawn/signal failures. `report` returns 0 for `VERIFIED`, 2 for `PARTIALLY_VERIFIED`/`UNVERIFIED`, 1 for `FAILED`, and 3 for `BLOCKED`. Invalid options and unsafe paths exit 3 with an error. Errors before a session exists cannot create a report; explain them in the final response.
+`init` prints an absolute session path. Other operations print compact JSON. `detect` exits zero even for an unsupported project; inspect its status and warnings. `run` returns the child's exit code, or 3 for timeout/spawn/signal failures. An `evidenceIssue` prevents successful verification even when the child exits zero. Empty output, Node/TAP zero passes, unittest zero/all-skipped tests, and common no-tests messages are rejected; other summaries still need human/agent inspection. `report` returns 0 for `VERIFIED`, 2 for `PARTIALLY_VERIFIED`/`UNVERIFIED`, 1 for `FAILED`, and 3 for `BLOCKED`. Invalid options and unsafe paths exit 3 with an error. Errors before a session exists cannot create a report; explain them in the final response.
 
 Each `.repfix/<timestamp-id>/` contains a versioned `run.json`, redacted logs and attachments with SHA-256 hashes, `report.md`, `report.json`, and a final Git diff. The initial Git diff is an artifact. Artifacts are append-only; reports are refreshable. The manifest is a local audit record, not a tamper-proof attestation. Missing/modified attachments block verification. A per-session lock prevents concurrent updates. After a crash, check the PID in `.lock` and remove that file only if the process is no longer running. Never delete a live lock.
 

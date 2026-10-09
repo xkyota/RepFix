@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { realpath } from 'node:fs/promises';
 import { relative } from 'node:path';
-import { clean, cleanArgs, hash, inside } from './safety.js';
+import { approveCommand, clean, cleanArgs, evidenceIssue, hash, inside } from './safety.js';
 import { snapshot } from './snapshot.js';
 import { addArtifact } from './store.js';
 import type { Command, Phase, Run } from './types.js';
@@ -64,7 +64,8 @@ export async function execute(argv: string[], cwd: string, timeoutMs: number, ma
     child.on('close', finish);
   });
 }
-export async function recordCommand(dir: string, run: Run, phase: Phase, name: string, argv: string[], cwdPath: string, timeoutMs: number, context: string): Promise<Command> {
+export async function recordCommand(dir: string, run: Run, phase: Phase, name: string, argv: string[], cwdPath: string, timeoutMs: number, context: string, approval = ''): Promise<Command> {
+  approval = approveCommand(argv, approval);
   if (run.mode === 'diagnose-only' && phase !== 'reproduce') throw new Error('diagnose-only accepts reproduction commands only');
   if (run.mode === 'verify-only' && phase === 'reproduce') throw new Error('verify-only accepts verification and regression commands only');
   if (phase === 'regression' && !run.regressions.includes(name)) throw new Error('Declare this regression with init --regression NAME before running it');
@@ -85,6 +86,7 @@ export async function recordCommand(dir: string, run: Run, phase: Phase, name: s
   const command: Command = {
     id: `c${run.commands.length + 1}`, phase, name: clean(name), argv: cleanArgs(argv),
     context: clean(context), runtime: `${process.version} ${process.platform}/${process.arch}`,
+    approval, evidenceIssue: evidenceIssue(result.output),
     cwd: relative(run.root, cwd) || '.', fingerprint, startedAt, ...metadata,
     before: before.digest, after: afterDigest, oracles, log: log.id,
   };
