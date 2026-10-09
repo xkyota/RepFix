@@ -5,7 +5,7 @@ import { changed, gitEvidence, snapshot } from './snapshot.js';
 import { integrity } from './store.js';
 import type { Assessment, Command, Run, Snapshot } from './types.js';
 
-const passed = (c: Command): boolean => c.exitCode === 0 && !c.error && !c.signal && !c.timedOut && !c.interrupted && !c.truncated && c.before === c.after;
+const passed = (c: Command): boolean => c.exitCode === 0 && !c.error && !c.evidenceIssue && !c.signal && !c.timedOut && !c.interrupted && !c.truncated && c.before === c.after;
 const blocked = (c: Command): boolean => !!c.error || c.timedOut || c.interrupted || !!c.signal;
 export function assess(run: Run, current: Snapshot, broken: string[] = [], blocker?: string): Assessment {
   const changedFiles = changed(run.baseline, current);
@@ -24,7 +24,7 @@ export function assess(run: Run, current: Snapshot, broken: string[] = [], block
   if (run.mode === 'diagnose-only') return result('UNVERIFIED', 'Diagnosis only; no fix was applied or verified.');
   const verifications = run.commands.filter(c => c.phase === 'verify');
   const verification = verifications.at(-1);
-  if (!verification || !passed(verification)) return result('UNVERIFIED', 'No complete, stable, successful verification run.');
+  if (!verification || !passed(verification)) return result('UNVERIFIED', verification?.evidenceIssue ?? 'No complete, stable, successful verification run.');
   const reasons: string[] = [];
   if (verification.after !== current.digest) reasons.push('Project changed after verification; rerun the original scenario.');
   const reproduction = run.commands.filter(c => c.phase === 'reproduce'
@@ -34,7 +34,7 @@ export function assess(run: Run, current: Snapshot, broken: string[] = [], block
   if (!reproduction) reasons.push('No confirmed original failure with the same command, environment, cwd, timeout, and context.');
   else {
     if (reproduction.after === verification.before) reasons.push('No project change separates the failure and success; a fix has not been demonstrated.');
-    if (reproduction.exitCode === 0 || reproduction.exitCode === null || blocked(reproduction) || reproduction.truncated || reproduction.before !== reproduction.after) {
+    if (reproduction.exitCode === 0 || reproduction.exitCode === null || blocked(reproduction) || reproduction.evidenceIssue || reproduction.truncated || reproduction.before !== reproduction.after) {
       reasons.push('Original failure evidence is incomplete or the reproduction changed project files.');
     }
     if (!run.oracles.length || run.oracles.some(path => reproduction.oracles[path] === 'MISSING' || reproduction.oracles[path] !== verification.oracles[path])) {
@@ -66,12 +66,13 @@ export async function report(dir: string, run: Run, blocker?: string): Promise<A
   const lines = [
     '# RepFix report', '', `**${assessment.status}** · ${run.mode} · ${run.id}`, '', cell(run.summary), '',
     '## Result', '', ...assessment.reasons.map(reason => `- ${cell(reason)}`), '',
+    ...(run.detection ? ['## Project', '', `Languages: ${cell(run.detection.languages.join(', ') || 'unknown')}. Frameworks: ${cell(run.detection.frameworks.join(', ') || 'none detected')}. Test runners: ${cell(run.detection.testRunners.join(', ') || 'unknown')}.`, ''] : []),
     '## Findings', '', ...run.notes.map(n => `- **${n.kind}**: ${cell(n.text)}${n.evidence.length ? ` (evidence: ${n.evidence.join(', ')})` : ''}`), '',
     '## Failure confirmation', '', ...run.confirmations.map(c => `- ${c.command}: ${cell(c.reason)}`), '',
     '## Commands', '', '| ID | Phase / name | Command | Exit | Duration | Evidence |', '| --- | --- | --- | --- | --- | --- |',
     ...run.commands.map(c => {
       const log = run.artifacts.find(a => a.id === c.log)!;
-      const flags = [c.timedOut && 'timeout', c.truncated && 'truncated', c.interrupted && 'interrupted', c.error, c.signal].filter(Boolean).join(', ');
+      const flags = [c.timedOut && 'timeout', c.truncated && 'truncated', c.interrupted && 'interrupted', c.error, c.evidenceIssue, c.signal].filter(Boolean).join(', ');
       return `| ${c.id} | ${c.phase} / ${cell(c.name)} | ${cell(JSON.stringify(c.argv))} (cwd: ${cell(c.cwd)}; runtime: ${cell(c.runtime)}; context: ${cell(c.context)}) | ${c.exitCode ?? 'none'} ${cell(flags)} | ${c.durationMs}ms | [${log.id}](${log.file}) |`;
     }), '', '## Changes since start', '',
     ...(!current ? ['Project snapshot unavailable; changes could not be assessed.'] : assessment.changedFiles.length ? assessment.changedFiles.map(path => `- ${cell(path)}${testFile(path) ? ' (test-related)' : ''}`) : ['No project content changes detected.']), '',
@@ -82,7 +83,7 @@ export async function report(dir: string, run: Run, blocker?: string): Promise<A
   ];
   for (const name of ['report.md', 'report.json', 'final-git.txt']) await noLinks(join(dir, name));
   await writeFile(join(dir, 'report.md'), lines.join('\n'), { mode: 0o600 });
-  await writeFile(join(dir, 'report.json'), JSON.stringify({ ...assessment, mode: run.mode, run: run.id, generatedAt: new Date().toISOString(), commands: run.commands, notes: run.notes, artifacts: run.artifacts }, null, 2) + '\n', { mode: 0o600 });
+  await writeFile(join(dir, 'report.json'), JSON.stringify({ ...assessment, mode: run.mode, run: run.id, generatedAt: new Date().toISOString(), detection: run.detection, commands: run.commands, notes: run.notes, artifacts: run.artifacts }, null, 2) + '\n', { mode: 0o600 });
   await writeFile(join(dir, 'final-git.txt'), clean(gitEvidence(run.root)), { mode: 0o600 });
   return assessment;
 }
