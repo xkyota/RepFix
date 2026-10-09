@@ -1,0 +1,4 @@
+interface:
+  display_name: "RepFix"
+  short_description: "Reproduce bugs, fix causes, verify with evidence"
+  default_prompt: "Use $repfix to reproduce this bug, apply a minimal fix, and verify the result with saved evidence."

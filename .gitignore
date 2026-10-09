@@ -1,0 +1,8 @@
+node_modules/
+skills/repfix/scripts/
+.repfix/
+coverage/
+*.tgz
+test-results/
+playwright-report/
+.DS_Store
