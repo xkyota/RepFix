@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest a focused improvement to RepFix.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Describe the debugging workflow that is difficult today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Include an example and any alternatives considered.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: How to validate it
+      description: Describe a reproducible scenario or test.

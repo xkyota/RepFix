@@ -1,0 +1,44 @@
+name: Bug report
+description: Report a reproducible problem with RepFix.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Please remove secrets and private project data from logs, reports, screenshots, and traces.
+        For vulnerabilities, follow SECURITY.md instead of opening a public issue.
+  - type: input
+    id: version
+    attributes:
+      label: RepFix version or commit
+      placeholder: 0.1.0 or commit SHA
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node.js version, agent host, and target project language.
+      placeholder: macOS 15, Node.js 22, Codex, JavaScript
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the smallest safe example and exact commands or prompt.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and evidence
+      description: Include relevant redacted output and whether the issue reproduces consistently.
+    validations:
+      required: true
