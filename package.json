@@ -4,7 +4,8 @@
   "description": "Evidence-first debugging skill for Codex and Claude Code",
   "type": "module",
   "license": "MIT",
-  "repository": "github:xkyota/RepFix",
+  "repository": { "type": "git", "url": "git+https://github.com/xkyota/RepFix.git" },
+  "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" },
   "engines": { "node": ">=22" },
   "bin": { "repfix": "skills/repfix/scripts/cli.js" },
   "files": ["skills/repfix", "README.md", "LICENSE", "docs/design.md"],
@@ -13,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "test": "npm run build && node --test test/*.test.mjs",
     "test:browser": "npm run build && node --test test/browser.e2e.mjs",
+    "test:pack": "node scripts/check-package.mjs",
     "check": "npm run typecheck && npm test",
     "prepack": "npm run build"
   },

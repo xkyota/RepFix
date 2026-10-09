@@ -118,13 +118,14 @@ npm run check                 # strict TypeScript + unit/integration/install tes
 npx --no-install playwright install chromium
 npm run test:browser          # real browser fail → fix → pass + regression
 npm pack                     # verify the distributable archive
+npm run test:pack             # pack, install offline, verify CLI and standalone copies
 ```
 
 Core tests cover metadata discovery, real Node/Python RED → GREEN flows, execution approval gates, zero-test false positives, failure scenarios, preservation of staged/unstaged work, restricted modes, test tampering, stale evidence, timeouts, process cleanup, redaction, literal argv execution, path confinement, and installation in both host directories (including CommonJS projects). The browser test uses synthetic local content and requires Chromium; it fails rather than silently skipping when the browser is unavailable.
 
-The [GitHub Actions workflow](.github/workflows/ci.yml) runs the core suite on Node 22/24 and macOS/Linux with Python 3.12, plus Chromium on Linux. Jobs have ten-minute limits and read-only repository permissions. Check the workflow run for a specific commit; local test results do not establish that hosted CI has run.
+The [GitHub Actions workflow](.github/workflows/ci.yml) runs strict typechecking, builds, core tests, real archive installation checks, and Chromium on Node 22/24/26 across macOS/Linux, with Python 3.12 for the core fixtures. Node 22 is the oldest supported runtime; `@types/node` stays on 22.x so newer runtime APIs cannot silently enter the codebase. Node 26 is also tested as the current supported release. Jobs have ten-minute limits and read-only repository permissions. Check the workflow run for a specific commit; local test results do not establish that hosted CI has run.
 
-Contributions are welcome. Read the [contribution guide](CONTRIBUTING.md), use the issue and pull request templates, and follow the [security policy](SECURITY.md) for private vulnerability reports. Maintainers create [releases](https://github.com/xkyota/RepFix/releases) after validating `main`; there is no automated npm publication.
+Contributions are welcome. Read the [contribution guide](CONTRIBUTING.md), use the issue and pull request templates, and follow the [security policy](SECURITY.md) for private vulnerability reports. [Release PRs](docs/releases.md) prepare SemVer versions and changelogs. Publishing requires a separate manual workflow and approval of the protected `release` environment; a push, tag, or PR merge never publishes automatically.
 
 ## Architecture
 
