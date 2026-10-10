@@ -1,6 +1,8 @@
 # RepFix - Reproduce the bug. Fix the cause.
 
 [![RepFix CI](https://github.com/xkyota/RepFix/actions/workflows/ci.yml/badge.svg)](https://github.com/xkyota/RepFix/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/repfix.svg)](https://www.npmjs.com/package/repfix)
+[![npm downloads](https://img.shields.io/npm/dm/repfix.svg)](https://www.npmjs.com/package/repfix)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **Reproduce the bug. Fix the cause. Prove the result.**
@@ -13,34 +15,53 @@ The skill performs the reasoning and edits using your agent's tools. A small Typ
 
 Requires **Node.js 22+**, npm, and Codex or Claude Code. The MVP is tested on JavaScript and Python bugs on macOS/Linux. Metadata detection also recognizes common TypeScript, Go and Rust setups; their runners must already be available in the target project. The recorder has no runtime npm dependencies.
 
-Review the checkout before building. Agents must obtain explicit user approval before installing dependencies or executing untrusted commands. The installation commands below are for the user to review and run; no dependencies are installed automatically by the skill.
+Review the [published npm package](https://www.npmjs.com/package/repfix) and the command before running it. Agents must obtain explicit user approval before installing dependencies or executing untrusted commands. These installation commands are for the user to review and run; the skill does not install dependencies automatically.
+
+Install a personal skill copy for your agent:
+
+```sh
+npx --yes repfix@latest install --target codex --scope user
+npx --yes repfix@latest install --target claude --scope user
+npx --yes repfix@latest install --target both --scope user
+```
+
+Run **one** of the commands above. For a project-local install instead, run this from the project root (replace `both` with `codex` or `claude` if needed):
+
+```sh
+npx --yes repfix@latest install --target both --project .
+```
+
+| Agent | Project-local skill | Personal skill |
+| --- | --- | --- |
+| Codex | `.agents/skills/repfix/` | `~/.agents/skills/repfix/` |
+| Claude Code | `.claude/skills/repfix/` | `~/.claude/skills/repfix/` |
+
+The default scope is the current project. Restart the agent session if the skill is not discovered. The installer refuses to overwrite an existing skill; review your customizations and move the old directory aside before installing a newer copy. No agent settings or existing project files are rewritten.
+
+Installed copies include compiled helpers, references, metadata, and the MIT license. They run without `node_modules` or a repository checkout.
+
+### Git checkout for contributors
+
+To work on RepFix itself, review the checkout before building:
 
 ```sh
 git clone https://github.com/xkyota/RepFix.git
 cd RepFix
 npm ci --ignore-scripts
 npm run build
-
-# Install a self-contained copy into both agents' project skill directories:
 node skills/repfix/scripts/cli.js install --target both --project /path/to/your-project
 ```
 
-| Host | Project install | Personal install |
-| --- | --- | --- |
-| Codex | `.agents/skills/repfix/` | `~/.agents/skills/repfix/` |
-| Claude Code | `.claude/skills/repfix/` | `~/.claude/skills/repfix/` |
+For manual installation, copy the complete **built** `skills/repfix/` directory to either skill path above. See [CONTRIBUTING.md](CONTRIBUTING.md) for development checks.
 
-Use `--target codex` or `--target claude` for one host. Use `--scope user` for a personal install. Restart the agent session if the skill is not discovered. The installer refuses to overwrite an existing skill; review your customizations and move the old directory aside before upgrading. No agent settings or existing project files are rewritten.
+## Quick Start
 
-Installed copies include compiled helpers, references, metadata, and the MIT license. They run without `node_modules` or the original clone. For manual installation, copy the complete **built** `skills/repfix/` directory to either path above. `npm pack` creates a distributable archive with the built skill and CLI; this repository does not assume an npm registry release exists.
-
-## Use
+Open a new agent session in the project after installing the skill. Describe the observed failure and expected result; attach a relevant screenshot, stack trace, or report when available.
 
 In **Codex**:
 
 ```text
 $repfix auto: A discount of zero produces $90 instead of $100. Reproduce and fix it.
-$repfix diagnose-only: Investigate this stack trace. Do not edit project files.
 $repfix verify-only: Check the current checkout's fix and relevant regressions.
 ```
 
@@ -49,10 +70,9 @@ In **Claude Code**:
 ```text
 /repfix auto: Clicking Apply discount with zero changes $100 to $90.
 /repfix diagnose-only: Investigate the attached screenshot and error log.
-/repfix verify-only: Verify the existing fix without modifying files.
 ```
 
-Attach the relevant screenshot, stack trace, or report and describe expected behavior. `auto` is the default. RepFix can also be selected automatically when a matching debugging task is requested. Your host's permissions and project instructions still apply.
+`auto` is the default. RepFix can also be selected automatically when a matching debugging task is requested. Your host's permissions and project instructions still apply.
 
 ## What happens
 
@@ -92,8 +112,8 @@ The agent must still establish that the assertion exercises the reported bug. Th
 ## CLI and examples
 
 ```sh
-node skills/repfix/scripts/cli.js --help
-node skills/repfix/scripts/cli.js detect --project /path/to/project
+npx --yes repfix@latest --help
+npx --yes repfix@latest detect --project /path/to/project
 ```
 
 The [command reference](skills/repfix/references/commands.md) provides a complete failure-to-fix session, attachment commands, status exit codes, and limits. The [browser guide](skills/repfix/references/browser.md) covers Playwright reproduction, unchanged browser settings, screenshots, and trace privacy.

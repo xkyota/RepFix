@@ -8,6 +8,17 @@
     "type": "git",
     "url": "git+https://github.com/xkyota/RepFix.git"
   },
+  "homepage": "https://github.com/xkyota/RepFix#readme",
+  "bugs": {
+    "url": "https://github.com/xkyota/RepFix/issues"
+  },
+  "keywords": [
+    "agent-skills",
+    "claude-code",
+    "codex",
+    "debugging",
+    "developer-tools"
+  ],
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"

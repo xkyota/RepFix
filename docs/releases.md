@@ -2,7 +2,7 @@
 
 ## Preparation and versioning
 
-`Prepare release PR` uses release-please to open/update a PR containing `package.json`, `package-lock.json`, `.release-please-manifest.json` and `CHANGELOG.md`. It never creates a tag or GitHub Release. Conventional Commit squash titles determine the next version: `fix:` → patch, `feat:` → minor, `!`/`BREAKING CHANGE:` → major. Review the proposed version before merging. The initial 0.1.0 manifest is an unpublished baseline, not a claim that an npm release exists.
+`Prepare release PR` uses release-please to open/update a PR containing `package.json`, `package-lock.json`, `.release-please-manifest.json` and `CHANGELOG.md`. It never creates a tag or GitHub Release. Conventional Commit squash titles determine the next version: `fix:` → patch, `feat:` → minor, `!`/`BREAKING CHANGE:` → major. Review the proposed version before merging. Version 0.1.0 was an unpublished baseline; 0.1.1 was the first npm publication.
 
 The generated CLI metadata reads the root package version during build, so npm, `repfix --version`, and installed skill copies agree. No runtime dependencies are added.
 
