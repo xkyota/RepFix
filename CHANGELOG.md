@@ -2,6 +2,13 @@
 
 Release PRs update this file using Conventional Commits. An entry is not proof of publication; see GitHub Releases and npm for published versions.
 
+## [0.1.3](https://github.com/xkyota/RepFix/compare/v0.1.2...v0.1.3) (2026-10-10)
+
+
+### Documentation
+
+* prioritize npm installation for RepFix ([#12](https://github.com/xkyota/RepFix/issues/12)) ([d79e05e](https://github.com/xkyota/RepFix/commit/d79e05eccf41aac50fb95d20839610a7f043b6d0))
+
 ## [0.1.2](https://github.com/xkyota/RepFix/compare/v0.1.1...v0.1.2) (2026-10-10)
 
 
