@@ -1,4 +1,4 @@
-# RepFix
+# RepFix - Reproduce the bug. Fix the cause.
 
 [![RepFix CI](https://github.com/xkyota/RepFix/actions/workflows/ci.yml/badge.svg)](https://github.com/xkyota/RepFix/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
