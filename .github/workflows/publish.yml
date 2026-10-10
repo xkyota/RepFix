@@ -36,13 +36,11 @@ jobs:
         with:
           name: npm-package-${{ github.run_id }}
           path: ${{ runner.temp }}/repfix-package
-      - name: Verify version, changelog and the tested archive
+      - name: Verify the tested archive against the npm registry
         env:
           RELEASE_VERSION: ${{ inputs.version }}
           ARTIFACT_DIR: ${{ runner.temp }}/repfix-package
-        run: |
-          node scripts/verify-release.mjs "$RELEASE_VERSION" "$ARTIFACT_DIR"
-          npm publish "$ARTIFACT_DIR/repfix-$RELEASE_VERSION.tgz" --dry-run --ignore-scripts --access public
+        run: node scripts/check-release-package.mjs "$RELEASE_VERSION" "$ARTIFACT_DIR"
   publish:
     if: inputs.publish && github.ref == 'refs/heads/main'
     needs: [validate, package]

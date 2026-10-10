@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
+import { npmPublicationState } from './npm-registry.mjs';
 import { verifyRelease } from './verify-release.mjs';
 
 assert.equal(process.env.REPFIX_PUBLISH_APPROVED, 'true');
@@ -37,14 +38,11 @@ if (tag) {
 const release = await github(`releases/tags/${meta.tag}`);
 if (release) assert.ok(tag && !release.draft && !release.prerelease, 'Existing release must be a published stable release');
 
-const response = await fetch(`https://registry.npmjs.org/repfix/${meta.version}`);
-if (response.status === 404) {
+const publicationState = await npmPublicationState(meta);
+if (publicationState === 'absent') {
   // OIDC is provided by the approved job. No token fallback or package lifecycle scripts.
   execFileSync('npm', ['publish', meta.tarball, '--access', 'public', '--provenance', '--ignore-scripts', '--registry', 'https://registry.npmjs.org/'], { stdio: 'inherit' });
 } else {
-  assert.ok(response.ok, `npm registry: HTTP ${response.status}`);
-  const published = await response.json();
-  assert.equal(published.dist?.integrity, meta.integrity, 'This npm version already contains different bytes; never overwrite or unpublish it');
   console.log('The identical npm artifact is already published; finishing GitHub release bookkeeping.');
 }
 if (!release) {
