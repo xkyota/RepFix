@@ -1,6 +1,6 @@
 {
   "name": "repfix",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Evidence-first debugging skill for Codex and Claude Code",
   "type": "module",
   "license": "MIT",
