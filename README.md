@@ -34,6 +34,20 @@ Use `--target codex` or `--target claude` for one host. Use `--scope user` for a
 
 Installed copies include compiled helpers, references, metadata, and the MIT license. They run without `node_modules` or the original clone. For manual installation, copy the complete **built** `skills/repfix/` directory to either path above. `npm pack` creates a distributable archive with the built skill and CLI; this repository does not assume an npm registry release exists.
 
+## Verify Installation
+
+From the project root, run the checks for the agent you installed:
+
+```sh
+node .agents/skills/repfix/scripts/cli.js --version
+test -f .agents/skills/repfix/SKILL.md && echo "Codex skill installed"
+
+node .claude/skills/repfix/scripts/cli.js --version
+test -f .claude/skills/repfix/SKILL.md && echo "Claude Code skill installed"
+```
+
+For a personal install (`--scope user`), replace `.agents/` with `~/.agents/` or `.claude/` with `~/.claude/`.
+
 ## Use
 
 In **Codex**:
