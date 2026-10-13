@@ -5,7 +5,7 @@ import { detect } from './detect.js';
 import { clean } from './safety.js';
 import { recordCommand } from './runner.js';
 import { report } from './report.js';
-import { artifactText, attach, init, integrity, locked } from './store.js';
+import { artifactText, attach, extendPlan, init, integrity, locked } from './store.js';
 import { classification, escalate, securityConcern, telemetry } from './adaptive.js';
 import type { EscalationEvent, Mode, NoteKind, Phase } from './types.js';
 
@@ -18,6 +18,7 @@ run     --session DIR --phase reproduce|verify|regression --name NAME --approval
         [--cwd RELATIVE_DIR] [--timeout MS] [--context TEXT] -- EXECUTABLE ARGS...
 confirm --session DIR --command ID --reason TEXT [--cause TEXT]
 signal  --session DIR --event EVENT --reason TEXT (raise verification depth)
+plan    --session DIR --regression NAME [--regression NAME ...] --reason TEXT
 note    --session DIR --kind fact|assumption|root-cause|fix|limitation|test-change
         --text TEXT [--evidence ID ...]
 attach  --session DIR --file PATH [--reviewed]
@@ -35,6 +36,7 @@ const allowed: Record<string, string[]> = {
   run: ['session', 'phase', 'name', 'cwd', 'timeout', 'context', 'approval'],
   confirm: ['session', 'command', 'reason', 'cause'], note: ['session', 'kind', 'text', 'evidence'],
   signal: ['session', 'event', 'reason'],
+  plan: ['session', 'regression', 'reason'],
   attach: ['session', 'file', 'reviewed'], report: ['session', 'blocked'],
   install: ['target', 'scope', 'project'],
 };
@@ -109,6 +111,10 @@ async function main(args: string[]): Promise<number> {
       if (!['ambiguous-reproduction', 'uncertain-root-cause', 'unexpected-test-failure', 'additional-components', 'security-or-data-integrity', 'unstable-tests'].includes(event)) throw new Error('Invalid escalation event');
       escalate(run, event as EscalationEvent, required('reason'));
       output({ profile: classification(run).current, escalations: classification(run).escalations }); return 0;
+    }
+    if (action === 'plan') {
+      extendPlan(run, many('regression'), required('reason'));
+      output({ regressions: run.regressions, changes: run.regressionPlanHistory, profile: classification(run).current }); return 0;
     }
     if (action === 'note') {
       const kind = required('kind') as NoteKind;

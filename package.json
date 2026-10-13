@@ -35,7 +35,8 @@
     "LICENSE",
     "docs/design.md",
     "docs/benchmark-adaptive.md",
-    "docs/benchmark-adaptive-results.json"
+    "docs/benchmark-adaptive-results.json",
+    "docs/pilot-adaptive.md"
   ],
   "scripts": {
     "build": "tsc && node scripts/package-skill.mjs",

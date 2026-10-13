@@ -26,9 +26,11 @@ export interface Command {
   before: string; after: string; oracles: Record<string, string>; log: string;
 }
 export interface Note { kind: NoteKind; text: string; evidence: string[] }
+export interface RegressionPlanChange { action: 'initial' | 'declare'; name: string; reason: string; at: string; afterCommand: number }
 export interface Run {
   version: 1; id: string; root: string; mode: Mode; createdAt: string; summary: string;
   baseline: Snapshot; oracles: string[]; regressions: string[];
+  regressionPlanHistory?: RegressionPlanChange[];
   commands: Command[]; artifacts: Artifact[]; notes: Note[];
   confirmations: { command: string; reason: string }[];
   detection?: Detection;

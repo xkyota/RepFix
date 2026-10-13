@@ -16,6 +16,30 @@ test('deterministic profile selection is separate from execution mode', async t 
   assert.ok((await manifest(deep)).classification.reasons.some(r => r.startsWith('risk:')));
 });
 
+test('uncertain, Russian, and sensitive-path summaries avoid FAST deterministically', async t => {
+  const root = await fixture(t);
+  const cases = [
+    ['Цена неверна при нулевой скидке', 'STANDARD'],
+    ['Ошибка', 'STANDARD'],
+    ['Sometimes the price seems wrong after clicking Apply', 'DEEP'],
+    ['The price might be incorrect after clicking Apply', 'STANDARD'],
+    ['Ошибка авторизации при открытии заказа', 'DEEP'],
+  ];
+  for (const [summary, expected] of cases) {
+    const session = invoke(['init', '--project', root, '--summary', summary, '--oracle', 'discount.test.mjs', '--regression', 'unit']);
+    const state = (await manifest(session)).classification;
+    assert.equal(state.selected, expected, summary);
+    assert.equal(state.selected, state.current);
+    assert.ok(state.reasons.length);
+    if (expected === 'STANDARD') assert.ok(state.uncertainty.length);
+  }
+  const sensitive = invoke(['init', '--project', root, '--summary', 'A zero price falls back to the default', '--oracle', 'payments.test.mjs', '--regression', 'unit'], 3);
+  assert.equal(sensitive, '');
+  await writeFile(join(root, 'payments.test.mjs'), 'export const assertion = true;\n');
+  const pathSession = invoke(['init', '--project', root, '--summary', 'A zero price falls back to the default', '--oracle', 'payments.test.mjs', '--regression', 'unit']);
+  assert.equal((await manifest(pathSession)).classification.selected, 'DEEP');
+});
+
 test('confirm can record an evidence-linked cause in the same call', async t => {
   const root = await fixture(t), session = start(root);
   command(session, 'reproduce', 1);
@@ -36,7 +60,10 @@ test('ambiguous reproduction and unexpected checks escalate without weakening VE
   assert.ok(run.classification.escalations.some(e => e.event === 'unexpected-test-failure'));
   const result = JSON.parse(invoke(['report', '--session', session], 1));
   assert.equal(result.status, 'FAILED');
-  assert.equal(result.telemetry.toolExecutionCount, 2);
+  assert.equal(result.telemetry.recordedCommandCount, 2);
+  assert.equal(result.telemetry.elapsedOutsideRecordedCommandsMs >= 0, true);
+  assert.equal(Object.hasOwn(result.telemetry, 'toolExecutionCount'), false);
+  assert.equal(Object.hasOwn(result.telemetry.phaseDurationsMs, 'other'), false);
   assert.ok(result.telemetry.totalDurationMs >= result.telemetry.phaseDurationsMs.reproduce);
 });
 
@@ -62,6 +89,44 @@ test('new component or security discovery requires regressions after escalation'
   assert.match(held.reasons.join(' '), /Regression unit/);
   command(session, 'regression', 0, ['--test', 'discount.test.mjs', 'default.test.mjs'], 'unit');
   assert.equal(JSON.parse(invoke(['report', '--session', session])).status, 'VERIFIED');
+});
+
+test('late plan extension records history and requires each new check after escalation', async t => {
+  const root = await fixture(t), session = start(root);
+  await complete(root, session);
+  invoke(['signal', '--session', session, '--event', 'additional-components', '--reason', 'The default price path also uses this helper']);
+  invoke(['plan', '--session', session, '--regression', 'adjacent', '--reason', 'Cover the newly found default price component']);
+  const history = (await manifest(session)).regressionPlanHistory;
+  assert.deepEqual(history.map(item => [item.action, item.name]), [['initial', 'unit'], ['declare', 'adjacent']]);
+  assert.equal(history[1].afterCommand, 3);
+  assert.match(history[1].reason, /newly found/);
+  assert.equal(JSON.parse(invoke(['report', '--session', session], 2)).status, 'PARTIALLY_VERIFIED');
+  command(session, 'regression', 0, ['--test', 'default.test.mjs'], 'adjacent');
+  assert.match(JSON.parse(invoke(['report', '--session', session], 2)).reasons.join(' '), /Regression unit/);
+  command(session, 'regression', 0, ['--test', 'discount.test.mjs', 'default.test.mjs'], 'unit');
+  const report = JSON.parse(invoke(['report', '--session', session]));
+  assert.equal(report.status, 'VERIFIED');
+  assert.equal((await readFile(join(session, 'report.json'), 'utf8')).includes('newly found default price'), true);
+  invoke(['plan', '--session', session, '--regression', 'adjacent', '--reason', 'Duplicate'], 3);
+});
+
+test('older manifests without a plan history can extend their plan', async t => {
+  const root = await fixture(t), session = start(root);
+  const old = await manifest(session);
+  delete old.regressionPlanHistory;
+  await writeFile(join(session, 'run.json'), JSON.stringify(old));
+  invoke(['plan', '--session', session, '--regression', 'adjacent', '--reason', 'Newly discovered component']);
+  const updated = await manifest(session);
+  assert.deepEqual(updated.regressions, ['unit', 'adjacent']);
+  assert.deepEqual(updated.regressionPlanHistory.map(item => item.name), ['adjacent']);
+});
+
+test('sensitive source path escalation catches plural and camel-case names', async t => {
+  const root = await fixture(t), session = start(root);
+  command(session, 'reproduce', 1);
+  await writeFile(join(root, 'paymentsHandler.mjs'), 'export const charge = () => false;\n');
+  command(session, 'reproduce', 1);
+  assert.ok((await manifest(session)).classification.escalations.some(e => e.event === 'security-or-data-integrity'));
 });
 
 test('DEEP profile still rejects changed test oracles', async t => {
