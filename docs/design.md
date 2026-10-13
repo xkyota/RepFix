@@ -6,6 +6,18 @@ oracles, and assess evidence. No model API, agent framework, hooks, or extra run
 dependencies are required. `src/` is the maintained TypeScript source;
 `npm run build` emits portable helpers in `skills/repfix/scripts/`.
 
+## Adaptive verification engine
+
+`src/adaptive.ts` classifies once at `init` using the already captured snapshot's file list, bounded detection metadata, the task summary, pinned oracles, and declared regressions. It scores bug complexity, scope, technical risk, test availability, environment uncertainty, and regression impact with a small deterministic rule set. A clear local bug with a detected runner and pinned checks selects FAST; ordinary or uncertain work selects STANDARD; cross-component, concurrent, monorepo, security, or data-integrity work selects DEEP. Reasons, confidence, and uncertainty are explicit. The optional `needsHostAssessment` flag asks the existing host agent to inspect evidence; it does not call a model API. A low confidence never lowers the profile.
+
+Profiles guide test selection, not CLI permissions or report status. FAST runs a focused RED/GREEN and relevant regression; STANDARD adds adjacent component checks; DEEP adds the affected integration, security, and broader checks. The host selects reviewed commands and declares relevant regressions. The CLI cannot infer semantic coverage of arbitrary tests. Existing `auto`, `diagnose-only`, and `verify-only` restrictions continue unchanged.
+
+The runner raises depth on incomplete reproduction, unexpected verification/regression failures, different exit codes for the same command and source state, multi-file source changes, and sensitive command context or paths. The host can record an unobservable discovery with `signal`; assumption/limitation and sensitive notes also raise depth. Events are retained with reason, time, command position, and old/new profile. A material event after checks requires declared regressions to run again. The status assessor's original RED/GREEN, unchanged-oracle, causal-note, freshness, artifact-integrity, and declared-regression gates remain mandatory for VERIFIED at every profile.
+
+Reports include local telemetry: profile selection and escalation, elapsed wall time, recorded command time per phase, command count, and outcomes. `other` includes host reasoning and CLI overhead. The helper cannot observe host tool calls or token use. Detection caches each metadata read within a session and uses the initial snapshot file list; command snapshots and artifact integrity checks remain necessary for evidence. No runtime dependency or external telemetry endpoint was added.
+
+When causality is established at RED confirmation, `confirm --cause` records the causal note in the same manifest update, avoiding one CLI launch and duplicate manifest loading. The separate `note` action remains available when diagnosis takes longer. This is a workflow optimization only; the same evidence requirements apply.
+
 ## Focused research (2026-10-09)
 
 The following public GitHub metadata was checked with the repository, contributor and

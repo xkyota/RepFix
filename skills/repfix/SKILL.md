@@ -21,6 +21,16 @@ Read the user's request for `auto` (default), `diagnose-only`, or `verify-only`.
 
 Mode restrictions cover your edits and subprocess side effects. If a command changes project files in either restricted mode, stop, disclose the changes, and report `FAILED`; never automatically revert another actor's work.
 
+## Adaptive verification profiles
+
+`init` classifies the task from the summary, pinned oracles, declared regressions, and already collected project metadata. Read `classification` in the saved `run.json` once after `init`: it contains `selected`, `current`, reasons, confidence, uncertainty, and whether host assessment would help. Profiles are internal depth choices; they never change `auto`, `diagnose-only`, or `verify-only`, and never relax the status contract.
+
+- **FAST:** for a localized, well understood bug with a usable test. Inspect targeted source once, run the focused RED/GREEN scenario, then the declared relevant regression. Do not run an expensive full suite without a concrete reason.
+- **STANDARD:** inspect adjacent behavior and run focused tests first, then the relevant component tests. Resolve classification uncertainty using your existing reasoning and project evidence.
+- **DEEP:** trace affected components and sensitive boundaries, use a focused reproduction first, then declare and run relevant cross-component, integration, security, or broader regressions on the final state. Select a focused package root in a monorepo when possible.
+
+The helper raises `current` automatically for ambiguous reproduction, unexpected check failures, inconsistent outcomes on unchanged source, and multi-file or sensitive changes it can observe. When you discover uncertain causality, added components, security/data-integrity exposure, or flaky results that the helper cannot observe, record it with `signal --session DIR --event EVENT --reason TEXT`. Inspect `profile` and `escalations` in `run` output; expand the regression plan before reporting. A material late escalation requires the declared regressions to pass again. Host assessment is optional and uses this host agent only; no model API is called by the helper. Never let a low confidence or FAST classification substitute for evidence.
+
 ## Evidence and setup
 
 Resolve this skill's directory from the loaded `SKILL.md` location. Use `node <skill-directory>/scripts/cli.js` as the helper; do not assume the current directory is the skill directory. Read [commands.md](references/commands.md) when creating or updating evidence. If the helper is unavailable, follow the same workflow manually, record the limitation, and do not claim `VERIFIED`.
@@ -34,6 +44,7 @@ Resolve this skill's directory from the loaded `SKILL.md` location. Use `node <s
 
 5. Run the regression test using `run --phase reproduce` and capture **RED before the fix**. The runner preserves bounded, redacted stdout/stderr and exact exit metadata. Inspect the log's relevant failure, then `confirm` that the failure matches the bug, citing the assertion/error in the reason. Dependency errors, unavailable services, missing browsers, timeouts, skipped tests, and unrelated failures do not demonstrate the bug. If reproduction is impossible, explain why and report the fix as unverified (`UNVERIFIED` or `BLOCKED` with the missing prerequisite); never invent historical evidence.
 6. Narrow the failure to a causal explanation. Record facts and the root cause with command/artifact IDs and concrete file locations; label untested ideas as assumptions. Choose the smallest experiment that separates competing explanations. Read [browser.md](references/browser.md) for browser bugs; prefer the project's existing Playwright setup.
+   If the cause is already established when confirming RED, use `confirm --cause TEXT` to record it with the failure evidence in one call.
 
 ## Fix and verify
 

@@ -3,6 +3,18 @@ export type Mode = 'auto' | 'diagnose-only' | 'verify-only';
 export type Phase = 'reproduce' | 'verify' | 'regression';
 export type Status = 'VERIFIED' | 'PARTIALLY_VERIFIED' | 'UNVERIFIED' | 'FAILED' | 'BLOCKED';
 export type NoteKind = 'fact' | 'assumption' | 'root-cause' | 'fix' | 'limitation' | 'test-change';
+export type Profile = 'FAST' | 'STANDARD' | 'DEEP';
+export type EscalationEvent = 'ambiguous-reproduction' | 'uncertain-root-cause' | 'unexpected-test-failure' | 'additional-components' | 'security-or-data-integrity' | 'unstable-tests';
+export interface Classification {
+  selected: Profile;
+  current: Profile;
+  reasons: string[];
+  confidence: number;
+  uncertainty: string[];
+  dimensions: Record<'complexity' | 'scope' | 'risk' | 'tests' | 'environment' | 'regressionImpact', number>;
+  needsHostAssessment: boolean;
+  escalations: { event: EscalationEvent; reason: string; at: string; afterCommand: number; from: Profile; to: Profile }[];
+}
 export interface Snapshot { files: Record<string, string>; digest: string; git: boolean }
 export interface Artifact { id: string; file: string; sha256: string; kind: string }
 export interface Command {
@@ -20,5 +32,6 @@ export interface Run {
   commands: Command[]; artifacts: Artifact[]; notes: Note[];
   confirmations: { command: string; reason: string }[];
   detection?: Detection;
+  classification?: Classification;
 }
 export interface Assessment { status: Status; reasons: string[]; changedFiles: string[] }

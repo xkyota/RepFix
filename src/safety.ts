@@ -74,6 +74,9 @@ export function approveCommand(argv: string[], approval: string): string {
 
 export function evidenceIssue(output: string): string | undefined {
   if (!output.trim()) return 'Command produced no observable output; inspect the test selection.';
+  if (/ERR_MODULE_NOT_FOUND|MODULE_NOT_FOUND|ModuleNotFoundError|ImportError: No module named|Cannot find module/i.test(output)) {
+    return 'A required module is unavailable; establish the environment before treating this as the reported bug.';
+  }
   const count = (name: string): number | undefined => {
     const match = output.match(new RegExp(`^(?:#|ℹ)\\s+${name}\\s+(\\d+)\\s*$`, 'm'));
     return match ? Number(match[1]) : undefined;
