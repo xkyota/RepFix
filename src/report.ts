@@ -49,7 +49,9 @@ export function assess(run: Run, current: Snapshot, broken: string[] = [], block
   const lastMaterialEscalation = classification(run).escalations.filter(e => ['additional-components', 'security-or-data-integrity', 'unstable-tests', 'unexpected-test-failure'].includes(e.event)).at(-1);
   for (const name of run.regressions) {
     const c = latest.get(`regression:${name}`);
+    const declaredAfter = run.regressionPlanHistory?.filter(change => change.name === name).at(-1)?.afterCommand ?? 0;
     if (!c || !passed(c) || c.after !== current.digest || run.commands.indexOf(c) < run.commands.indexOf(verification)
+      || run.commands.indexOf(c) < declaredAfter
       || lastMaterialEscalation && run.commands.indexOf(c) < lastMaterialEscalation.afterCommand) {
       reasons.push(`Regression ${name} has not passed on the final project state after verification.`);
     }
@@ -78,7 +80,10 @@ export async function report(dir: string, run: Run, blocker?: string): Promise<A
     ...metrics.classificationReasons.map(reason => `- ${cell(reason)}`),
     ...metrics.uncertainty.map(reason => `- Uncertainty: ${cell(reason)}`),
     ...metrics.escalationEvents.map(event => `- Escalated ${event.from} → ${event.to}: ${cell(event.event)} — ${cell(event.reason)}`),
-    `Elapsed: ${metrics.totalDurationMs}ms; recorded commands: ${metrics.toolExecutionCount}; command time: reproduce ${metrics.phaseDurationsMs.reproduce}ms, verify ${metrics.phaseDurationsMs.verify}ms, regression ${metrics.phaseDurationsMs.regression}ms; host/other ${metrics.phaseDurationsMs.other}ms.`, '',
+    `Elapsed: ${metrics.totalDurationMs}ms; recorded commands: ${metrics.recordedCommandCount}; command time: reproduce ${metrics.phaseDurationsMs.reproduce}ms, verify ${metrics.phaseDurationsMs.verify}ms, regression ${metrics.phaseDurationsMs.regression}ms; elapsed outside recorded child commands: ${metrics.elapsedOutsideRecordedCommandsMs}ms.`, '',
+    '## Regression plan', '',
+    ...run.regressions.map(name => `- ${cell(name)}`),
+    ...(run.regressionPlanHistory ?? []).map(change => `- ${cell(change.action)} ${cell(change.name)} after ${change.afterCommand} commands: ${cell(change.reason)} (${cell(change.at)})`), '',
     ...(run.detection ? ['## Project', '', `Languages: ${cell(run.detection.languages.join(', ') || 'unknown')}. Frameworks: ${cell(run.detection.frameworks.join(', ') || 'none detected')}. Test runners: ${cell(run.detection.testRunners.join(', ') || 'unknown')}.`, ''] : []),
     '## Findings', '', ...run.notes.map(n => `- **${n.kind}**: ${cell(n.text)}${n.evidence.length ? ` (evidence: ${n.evidence.join(', ')})` : ''}`), '',
     '## Failure confirmation', '', ...run.confirmations.map(c => `- ${c.command}: ${cell(c.reason)}`), '',
@@ -96,7 +101,7 @@ export async function report(dir: string, run: Run, blocker?: string): Promise<A
   ];
   for (const name of ['report.md', 'report.json', 'final-git.txt']) await noLinks(join(dir, name));
   await writeFile(join(dir, 'report.md'), lines.join('\n'), { mode: 0o600 });
-  await writeFile(join(dir, 'report.json'), JSON.stringify({ ...assessment, mode: run.mode, run: run.id, generatedAt: new Date().toISOString(), telemetry: metrics, detection: run.detection, commands: run.commands, notes: run.notes, artifacts: run.artifacts }, null, 2) + '\n', { mode: 0o600 });
+  await writeFile(join(dir, 'report.json'), JSON.stringify({ ...assessment, mode: run.mode, run: run.id, generatedAt: new Date().toISOString(), telemetry: metrics, regressionPlanHistory: run.regressionPlanHistory ?? [], detection: run.detection, commands: run.commands, notes: run.notes, artifacts: run.artifacts }, null, 2) + '\n', { mode: 0o600 });
   await writeFile(join(dir, 'final-git.txt'), clean(gitEvidence(run.root)), { mode: 0o600 });
   return assessment;
 }

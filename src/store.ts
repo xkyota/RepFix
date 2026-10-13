@@ -41,6 +41,7 @@ export async function init(rootPath: string, mode: Mode, summary: string, oracle
     baseline, oracles, regressions: [...new Set(regressions)], commands: [], artifacts: [], notes: [], confirmations: [],
     detection: await detect(root, Object.keys(baseline.files)),
   };
+  run.regressionPlanHistory = run.regressions.map(name => ({ action: 'initial', name, reason: 'Declared at session initialization.', at: run.createdAt, afterCommand: 0 }));
   run.classification = classify(run);
   await addArtifact(dir, run, clean(gitEvidence(root)), 'baseline-git', 'txt');
   await save(dir, run);
@@ -64,6 +65,12 @@ export async function load(runPath: string): Promise<{ dir: string; run: Run }> 
     || !['FAST', 'STANDARD', 'DEEP'].includes(run.classification.current)
     || !Array.isArray(run.classification.reasons) || !Array.isArray(run.classification.uncertainty)
     || !Array.isArray(run.classification.escalations))) throw new Error('Invalid adaptive classification record');
+  if (run.regressionPlanHistory !== undefined && (!Array.isArray(run.regressionPlanHistory)
+    || run.regressionPlanHistory.some(change => !['initial', 'declare'].includes(change.action)
+      || typeof change.name !== 'string' || !run.regressions.includes(change.name)
+      || typeof change.reason !== 'string' || !change.reason.trim()
+      || !Number.isSafeInteger(change.afterCommand) || change.afterCommand < 0 || change.afterCommand > run.commands.length
+      || !Number.isFinite(Date.parse(change.at))))) throw new Error('Invalid regression plan history');
   classification(run); // Older version-1 sessions remain readable.
   for (const a of run.artifacts) {
     if (!/^a\d+$/.test(a.id) || !/^a\d+\.[a-z0-9]+$/.test(a.file) || !/^[a-f0-9]{64}$/.test(a.sha256)) throw new Error('Invalid artifact record');
@@ -75,6 +82,17 @@ export async function load(runPath: string): Promise<{ dir: string; run: Run }> 
       || !run.artifacts.some(a => a.id === c.log)) throw new Error('Invalid command record');
   }
   return { dir, run };
+}
+export function extendPlan(run: Run, names: string[], reason: string): void {
+  const explanation = clean(reason);
+  if (!explanation.trim()) throw new Error('Plan extension requires a concrete reason');
+  if (!names.length || names.some(name => !/^[a-zA-Z0-9._-]+$/.test(name))) throw new Error('Regression names must contain only letters, digits, dots, underscores, or hyphens');
+  if (new Set(names).size !== names.length || names.some(name => run.regressions.includes(name))) throw new Error('Plan extension requires new, distinct regression names');
+  run.regressionPlanHistory ??= [];
+  for (const name of names) {
+    run.regressions.push(name);
+    run.regressionPlanHistory.push({ action: 'declare', name, reason: explanation, at: new Date().toISOString(), afterCommand: run.commands.length });
+  }
 }
 export async function locked<T>(runPath: string, action: (dir: string, run: Run) => Promise<T>): Promise<T> {
   const dir = resolve(runPath);

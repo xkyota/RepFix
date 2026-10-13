@@ -20,7 +20,7 @@ try {
     'skills/repfix/scripts/cli.js', 'skills/repfix/scripts/package.json', 'skills/repfix/scripts/LICENSE']) {
     assert.ok(files.includes(required), `Missing package file: ${required}`);
   }
-  assert.ok(files.every(file => /^(package\.json|LICENSE|README\.md|docs\/(?:design|benchmark-adaptive)\.md|docs\/benchmark-adaptive-results\.json|skills\/repfix\/.+)$/.test(file)), 'Unexpected packaged source, tests or credentials');
+  assert.ok(files.every(file => /^(package\.json|LICENSE|README\.md|docs\/(?:design|benchmark-adaptive|pilot-adaptive)\.md|docs\/benchmark-adaptive-results\.json|skills\/repfix\/.+)$/.test(file)), 'Unexpected packaged source, tests or credentials');
   assert.equal(packed.version, pkg.version);
   const tarball = join(temp, packed.filename);
   const consumer = join(temp, 'consumer');

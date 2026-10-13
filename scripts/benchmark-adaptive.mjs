@@ -5,13 +5,16 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
+import { pathToFileURL } from 'node:url';
 
 const repo = resolve(import.meta.dirname, '..');
 const node = process.execPath;
-const [baselineCli, candidateCli, outputFile] = process.argv.slice(2);
-if (!baselineCli || !candidateCli) throw new Error('Usage: node scripts/benchmark-adaptive.mjs BASELINE_CLI CANDIDATE_CLI [OUTPUT_JSON]');
+const [baselineCli, candidateCli, outputFile, repeatsArg = '3'] = process.argv.slice(2);
+if (!baselineCli || !candidateCli || !/^[1-9]\d*$/.test(repeatsArg)) throw new Error('Usage: node scripts/benchmark-adaptive.mjs BASELINE_CLI CANDIDATE_CLI [OUTPUT_JSON] [REPEATS]');
+const repeats = Number(repeatsArg);
+if (!Number.isSafeInteger(repeats) || repeats > 20) throw new Error('REPEATS must be 1–20');
 
 const runProcess = (argv, cwd) => spawnSync(argv[0], argv.slice(1), { cwd, encoding: 'utf8', timeout: 120_000 });
 const write = (root, path, content) => writeFile(join(root, path), content);
@@ -85,7 +88,7 @@ const scenarios = [
   },
 ];
 
-async function executeScenario(scenario, cli, variant) {
+async function executeScenario(scenario, cli, variant, round, orderPosition) {
   const root = await mkdtemp(join(tmpdir(), 'repfix-benchmark-'));
   let calls = 0;
   const invoke = (args, expected) => {
@@ -102,12 +105,13 @@ async function executeScenario(scenario, cli, variant) {
     const started = performance.now();
     const session = invoke(['init', '--project', root, '--summary', scenario.summary, '--oracle', scenario.oracle,
       ...(scenario.expected ? [] : ['--regression', 'relevant'])], 0);
+    const initDurationMs = Math.round(performance.now() - started);
     const red = run(session, 'reproduce', 'original', scenario.red, 1);
     if (scenario.name === 'flaky-tests') run(session, 'reproduce', 'original', scenario.red, 0);
     if (!scenario.expected) {
       invoke(['confirm', '--session', session, '--command', red.id, '--reason', 'The pinned assertion fails on the reported original scenario',
-        ...(variant === 'candidate' ? ['--cause', 'The source uses an incorrect conditional'] : [])], 0);
-      if (variant === 'baseline') invoke(['note', '--session', session, '--kind', 'root-cause', '--evidence', red.id, '--text', 'The source uses an incorrect conditional'], 0);
+        ...(variant === 'candidate_with_cause' ? ['--cause', 'The source uses an incorrect conditional'] : [])], 0);
+      if (variant !== 'candidate_with_cause') invoke(['note', '--session', session, '--kind', 'root-cause', '--evidence', red.id, '--text', 'The source uses an incorrect conditional'], 0);
       await scenario.fix(root);
       run(session, 'verify', 'original', scenario.red, 0);
       invoke(['note', '--session', session, '--kind', 'fix', '--evidence', 'c2', '--text', 'Changed the demonstrated source condition'], 0);
@@ -121,30 +125,54 @@ async function executeScenario(scenario, cli, variant) {
     const independentCorrect = scenario.name === 'missing-dependencies' ? independentExits[0] !== 0
       : scenario.name === 'flaky-tests' ? independentExits[0] !== independentExits[1]
         : independentExits.every(code => code === 0);
-    return { scenario: scenario.name, expectedStatus: scenario.expected ?? 'VERIFIED', status: report.status,
+    return { scenario: scenario.name, round, orderPosition, expectedStatus: scenario.expected ?? 'VERIFIED', status: report.status,
       profile: report.profile ?? null, validFix: scenario.expected ? null : report.status === 'VERIFIED' && oracleUnchanged && independentCorrect,
       falseVerified: report.status === 'VERIFIED' && (scenario.expected || !oracleUnchanged || !independentCorrect),
-      independentCorrect, oracleUnchanged, durationMs, toolCalls: calls, tokenUsage: null };
+      independentCorrect, oracleUnchanged, durationMs, initDurationMs, toolCalls: calls, tokenUsage: null };
   } finally { await rm(root, { recursive: true, force: true }); }
 }
 
-const results = { baseline: [], candidate: [] };
-for (const [index, scenario] of scenarios.entries()) {
-  const order = index % 2 ? [['candidate', candidateCli], ['baseline', baselineCli]] : [['baseline', baselineCli], ['candidate', candidateCli]];
-  for (const [variant, path] of order) {
-    const result = await executeScenario(scenario, resolve(path), variant);
-    results[variant].push(result);
-    process.stderr.write(`${variant} ${scenario.name}: ${result.status}, ${result.durationMs}ms, ${result.toolCalls} calls\n`);
+const results = { baseline: [], candidate_no_cause: [], candidate_with_cause: [] };
+const variants = [['baseline', baselineCli], ['candidate_no_cause', candidateCli], ['candidate_with_cause', candidateCli]];
+for (let round = 1; round <= repeats; round++) {
+  for (const [index, scenario] of scenarios.entries()) {
+    const offset = (round + index) % variants.length;
+    const order = [...variants.slice(offset), ...variants.slice(0, offset)];
+    for (const [orderPosition, [variant, path]] of order.entries()) {
+      const result = await executeScenario(scenario, resolve(path), variant, round, orderPosition + 1);
+      results[variant].push(result);
+      process.stderr.write(`round ${round} ${variant} ${scenario.name}: ${result.status}, ${result.durationMs}ms, ${result.toolCalls} calls\n`);
+    }
   }
 }
-const median = values => { const sorted = [...values].sort((a, b) => a - b); return (sorted[3] + sorted[4]) / 2; };
-const p95 = values => [...values].sort((a, b) => a - b)[Math.ceil(values.length * 0.95) - 1];
+const median = values => { const sorted = [...values].sort((a, b) => a - b); const mid = Math.floor(sorted.length / 2); return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2; };
+const variability = values => ({ minMs: Math.min(...values), maxMs: Math.max(...values), medianMs: median(values),
+  observedP95Ms: [...values].sort((a, b) => a - b)[Math.ceil(values.length * 0.95) - 1],
+  standardDeviationMs: Math.round(Math.sqrt(values.reduce((sum, value) => sum + (value - values.reduce((a, b) => a + b, 0) / values.length) ** 2, 0) / values.length) * 10) / 10 });
 const summarize = rows => ({ validFixRate: `${rows.filter(r => r.validFix).length}/${rows.filter(r => r.validFix !== null).length}`,
-  falseVerifiedClaims: rows.filter(r => r.falseVerified).length, medianMs: median(rows.map(r => r.durationMs)),
-  p95Ms: p95(rows.map(r => r.durationMs)), toolCalls: rows.reduce((sum, r) => sum + r.toolCalls, 0),
+  falseVerifiedClaims: rows.filter(r => r.falseVerified).length, timing: variability(rows.map(r => r.durationMs)),
+  initTiming: variability(rows.map(r => r.initDurationMs)),
+  byScenario: Object.fromEntries(scenarios.map(s => [s.name, variability(rows.filter(r => r.scenario === s.name).map(r => r.durationMs))])),
+  cliCalls: rows.reduce((sum, r) => sum + r.toolCalls, 0),
   failedRuns: rows.filter(r => r.status === 'FAILED').length, blockedRuns: rows.filter(r => r.status === 'BLOCKED').length,
   tokenUsage: null });
-const output = { methodology: 'One controlled fixture run per scenario and variant; fixed edits and independent post-report checks. Candidate combines confirmation and root-cause note in one compatible call. This measures recorder workflow overhead, not autonomous agent fix quality. CLI invocations count as tool calls; model tokens unavailable.',
-  node: process.version, platform: process.platform, baseline: summarize(results.baseline), candidate: summarize(results.candidate), runs: results };
+const paired = (left, right) => results[left].map((row, index) => ({ scenario: row.scenario, round: row.round,
+  durationDeltaMs: results[right][index].durationMs - row.durationMs,
+  initDeltaMs: results[right][index].initDurationMs - row.initDurationMs,
+  cliCallDelta: results[right][index].toolCalls - row.toolCalls }));
+const { classify } = await import(pathToFileURL(join(dirname(resolve(candidateCli)), 'adaptive.js')).href);
+const selectorSample = { summary: 'A zero discount changes a single isolated JavaScript price calculation',
+  oracles: ['discount.test.mjs'], regressions: ['relevant'], detection: { testRunners: ['node:test'], warnings: [], status: 'supported' } };
+const selectorSamplesUs = [];
+for (let batch = 0; batch < 10; batch++) {
+  const started = performance.now();
+  for (let i = 0; i < 10000; i++) classify(selectorSample);
+  selectorSamplesUs.push(Math.round((performance.now() - started) * 100) / 1000);
+}
+const output = { methodology: `${repeats} repeated fixture runs per scenario and variant, with rotated order, fixed edits and independent post-report checks. Baseline versus candidate_no_cause estimates the whole candidate CLI change, including profile selection; candidate_no_cause versus candidate_with_cause isolates confirm --cause. These are recorder runs, not agent runs. Timing variability and observed p95 are descriptive; CLI calls exclude host tool calls and model tokens are unavailable.`,
+  node: process.version, platform: process.platform, repeats, baseline: summarize(results.baseline),
+  candidate_no_cause: summarize(results.candidate_no_cause), candidate_with_cause: summarize(results.candidate_with_cause),
+  selectorCpuMicrosecondsPerCall: { batches: 10, callsPerBatch: 10000, min: Math.min(...selectorSamplesUs), median: median(selectorSamplesUs), max: Math.max(...selectorSamplesUs) },
+  pairedDeltas: { profileSelectionAndOtherChanges: paired('baseline', 'candidate_no_cause'), confirmCause: paired('candidate_no_cause', 'candidate_with_cause') }, runs: results };
 if (outputFile) await writeFile(resolve(outputFile), `${JSON.stringify(output, null, 2)}\n`);
 process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);

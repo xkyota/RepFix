@@ -4,7 +4,7 @@ import { relative } from 'node:path';
 import { approveCommand, clean, cleanArgs, evidenceIssue, hash, inside, testFile } from './safety.js';
 import { changed, snapshot } from './snapshot.js';
 import { addArtifact } from './store.js';
-import { escalate, securityConcern } from './adaptive.js';
+import { escalate, securityConcern, sensitivePath } from './adaptive.js';
 import type { Command, Phase, Run } from './types.js';
 
 interface Result {
@@ -69,7 +69,7 @@ export async function recordCommand(dir: string, run: Run, phase: Phase, name: s
   approval = approveCommand(argv, approval);
   if (run.mode === 'diagnose-only' && phase !== 'reproduce') throw new Error('diagnose-only accepts reproduction commands only');
   if (run.mode === 'verify-only' && phase === 'reproduce') throw new Error('verify-only accepts verification and regression commands only');
-  if (phase === 'regression' && !run.regressions.includes(name)) throw new Error('Declare this regression with init --regression NAME before running it');
+  if (phase === 'regression' && !run.regressions.includes(name)) throw new Error('Declare this regression with init --regression NAME or plan --regression NAME before running it');
   const cwd = await realpath(inside(run.root, cwdPath));
   inside(run.root, cwd);
   const before = await snapshot(run.root);
@@ -106,7 +106,7 @@ export async function recordCommand(dir: string, run: Run, phase: Phase, name: s
   const changedFiles = changed(run.baseline, before);
   const sourceFiles = changedFiles.filter(path => !testFile(path));
   if (sourceFiles.length > 1) escalate(run, 'additional-components', `Changes span ${sourceFiles.length} files: ${sourceFiles.slice(0, 5).join(', ')}.`);
-  if (sourceFiles.some(securityConcern)) escalate(run, 'security-or-data-integrity', 'Changed source paths identify a sensitive component.');
+  if (sourceFiles.some(sensitivePath)) escalate(run, 'security-or-data-integrity', 'Changed source paths identify a sensitive component.');
   if (securityConcern(context)) escalate(run, 'security-or-data-integrity', `Command context for ${command.id} identifies a sensitive path.`);
   return command;
 }
