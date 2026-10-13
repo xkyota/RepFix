@@ -33,7 +33,9 @@
     "skills/repfix",
     "README.md",
     "LICENSE",
-    "docs/design.md"
+    "docs/design.md",
+    "docs/benchmark-adaptive.md",
+    "docs/benchmark-adaptive-results.json"
   ],
   "scripts": {
     "build": "tsc && node scripts/package-skill.mjs",

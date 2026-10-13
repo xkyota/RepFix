@@ -39,13 +39,17 @@ export async function detect(project: string, knownFiles?: string[]): Promise<De
   }
   else await walk(root, 0);
   const has = (file: string): boolean => files.includes(file);
+  const readCache = new Map<string, Promise<string>>();
   async function read(file: string): Promise<string> {
     if (!has(file)) return '';
-    try {
+    if (readCache.has(file)) return readCache.get(file)!;
+    const value = (async () => { try {
       const path = inside(root, file);
       await noLinks(path);
       return (await boundedRead(path, 256 * 1024)).toString('utf8');
-    } catch { result.warnings.push(`Cannot safely read ${file}; inspect it manually.`); return ''; }
+    } catch { result.warnings.push(`Cannot safely read ${file}; inspect it manually.`); return ''; } })();
+    readCache.set(file, value);
+    return value;
   }
   const language = (name: string): void => { if (!result.languages.includes(name)) result.languages.push(name); };
   const runner = (name: string, argv: string[]): void => {

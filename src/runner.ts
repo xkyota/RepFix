@@ -1,9 +1,10 @@
 import { spawn } from 'node:child_process';
 import { realpath } from 'node:fs/promises';
 import { relative } from 'node:path';
-import { approveCommand, clean, cleanArgs, evidenceIssue, hash, inside } from './safety.js';
-import { snapshot } from './snapshot.js';
+import { approveCommand, clean, cleanArgs, evidenceIssue, hash, inside, testFile } from './safety.js';
+import { changed, snapshot } from './snapshot.js';
 import { addArtifact } from './store.js';
+import { escalate, securityConcern } from './adaptive.js';
 import type { Command, Phase, Run } from './types.js';
 
 interface Result {
@@ -91,5 +92,21 @@ export async function recordCommand(dir: string, run: Run, phase: Phase, name: s
     before: before.digest, after: afterDigest, oracles, log: log.id,
   };
   run.commands.push(command);
+  if (phase === 'reproduce' && (command.exitCode === 0 || command.evidenceIssue || command.error || command.timedOut || command.truncated)) {
+    escalate(run, 'ambiguous-reproduction', `Reproduction ${command.id} did not provide a complete, stable original failure.`);
+  }
+  if (phase !== 'reproduce' && (command.exitCode !== 0 || command.error || command.timedOut || command.evidenceIssue)) {
+    escalate(run, 'unexpected-test-failure', `${phase} ${command.id} did not pass completely.`);
+  }
+  if (phase === 'verify' && !run.notes.some(note => note.kind === 'root-cause')) {
+    escalate(run, 'uncertain-root-cause', `Verification ${command.id} began without a recorded causal finding.`);
+  }
+  const prior = run.commands.slice(0, -1).find(c => c.fingerprint === command.fingerprint && c.before === command.before && c.exitCode !== command.exitCode);
+  if (prior) escalate(run, 'unstable-tests', `${prior.id} and ${command.id} returned different exit codes on the same project state.`);
+  const changedFiles = changed(run.baseline, before);
+  const sourceFiles = changedFiles.filter(path => !testFile(path));
+  if (sourceFiles.length > 1) escalate(run, 'additional-components', `Changes span ${sourceFiles.length} files: ${sourceFiles.slice(0, 5).join(', ')}.`);
+  if (sourceFiles.some(securityConcern)) escalate(run, 'security-or-data-integrity', 'Changed source paths identify a sensitive component.');
+  if (securityConcern(context)) escalate(run, 'security-or-data-integrity', `Command context for ${command.id} identifies a sensitive path.`);
   return command;
 }

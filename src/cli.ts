@@ -6,7 +6,8 @@ import { clean } from './safety.js';
 import { recordCommand } from './runner.js';
 import { report } from './report.js';
 import { artifactText, attach, init, integrity, locked } from './store.js';
-import type { Mode, NoteKind, Phase } from './types.js';
+import { classification, escalate, securityConcern, telemetry } from './adaptive.js';
+import type { EscalationEvent, Mode, NoteKind, Phase } from './types.js';
 
 const help = `RepFix — evidence-first debugging (Node.js 22+)
 
@@ -15,7 +16,8 @@ init    --project DIR --summary TEXT [--mode auto|diagnose-only|verify-only]
         [--oracle RELATIVE_FILE ...] [--regression NAME ...]
 run     --session DIR --phase reproduce|verify|regression --name NAME --approval TEXT
         [--cwd RELATIVE_DIR] [--timeout MS] [--context TEXT] -- EXECUTABLE ARGS...
-confirm --session DIR --command ID --reason TEXT
+confirm --session DIR --command ID --reason TEXT [--cause TEXT]
+signal  --session DIR --event EVENT --reason TEXT (raise verification depth)
 note    --session DIR --kind fact|assumption|root-cause|fix|limitation|test-change
         --text TEXT [--evidence ID ...]
 attach  --session DIR --file PATH [--reviewed]
@@ -31,7 +33,8 @@ const allowed: Record<string, string[]> = {
   detect: ['project'],
   init: ['project', 'summary', 'mode', 'oracle', 'regression'],
   run: ['session', 'phase', 'name', 'cwd', 'timeout', 'context', 'approval'],
-  confirm: ['session', 'command', 'reason'], note: ['session', 'kind', 'text', 'evidence'],
+  confirm: ['session', 'command', 'reason', 'cause'], note: ['session', 'kind', 'text', 'evidence'],
+  signal: ['session', 'event', 'reason'],
   attach: ['session', 'file', 'reviewed'], report: ['session', 'blocked'],
   install: ['target', 'scope', 'project'],
 };
@@ -84,7 +87,7 @@ async function main(args: string[]): Promise<number> {
       const name = required('name');
       if (!/^[a-zA-Z0-9._-]+$/.test(name)) throw new Error('Invalid command name');
       const c = await recordCommand(dir, run, phase as Phase, name, argv, optional('cwd', '.'), timeout, optional('context'), required('approval'));
-      output({ id: c.id, exitCode: c.exitCode, timedOut: c.timedOut, error: c.error, evidenceIssue: c.evidenceIssue, log: run.artifacts.find(a => a.id === c.log)?.file });
+      output({ id: c.id, exitCode: c.exitCode, timedOut: c.timedOut, error: c.error, evidenceIssue: c.evidenceIssue, log: run.artifacts.find(a => a.id === c.log)?.file, profile: classification(run).current, escalations: classification(run).escalations.filter(e => e.afterCommand === run.commands.length) });
       return c.error || c.timedOut || c.interrupted || c.signal ? 3 : c.exitCode ?? 3;
     }
     if (action === 'confirm') {
@@ -95,7 +98,17 @@ async function main(args: string[]): Promise<number> {
       if ((await integrity(dir, run)).length || !(await artifactText(dir, run, c.log)).trim()) throw new Error('Reproduction evidence is missing, empty, or altered');
       if (run.confirmations.some(item => item.command === c.id)) throw new Error('Command already confirmed');
       run.confirmations.push({ command: c.id, reason: clean(required('reason')) });
-      output({ confirmed: c.id }); return 0;
+      if (optional('cause')) {
+        run.notes.push({ kind: 'root-cause', text: clean(optional('cause')), evidence: [c.id] });
+        if (securityConcern(optional('cause'))) escalate(run, 'security-or-data-integrity', 'Confirmed cause identifies a sensitive path.');
+      }
+      output({ confirmed: c.id, ...(optional('cause') ? { rootCauseNote: run.notes.length } : {}) }); return 0;
+    }
+    if (action === 'signal') {
+      const event = required('event');
+      if (!['ambiguous-reproduction', 'uncertain-root-cause', 'unexpected-test-failure', 'additional-components', 'security-or-data-integrity', 'unstable-tests'].includes(event)) throw new Error('Invalid escalation event');
+      escalate(run, event as EscalationEvent, required('reason'));
+      output({ profile: classification(run).current, escalations: classification(run).escalations }); return 0;
     }
     if (action === 'note') {
       const kind = required('kind') as NoteKind;
@@ -105,11 +118,13 @@ async function main(args: string[]): Promise<number> {
       if (evidence.some(id => !ids.has(id))) throw new Error('Evidence references must name existing command or artifact IDs');
       if (['fact', 'root-cause'].includes(kind) && !evidence.length) throw new Error('Facts and root causes need --evidence');
       run.notes.push({ kind, text: clean(required('text')), evidence });
+      if (kind === 'assumption' || kind === 'limitation') escalate(run, 'uncertain-root-cause', `${kind} note records unresolved uncertainty.`);
+      if (securityConcern(required('text'))) escalate(run, 'security-or-data-integrity', `${kind} note identifies a sensitive path.`);
       output({ note: run.notes.length }); return 0;
     }
     if (action === 'attach') { output(await attach(dir, run, required('file'), optional('reviewed') === 'true')); return 0; }
     const result = await report(dir, run, optional('blocked') || undefined);
-    output({ ...result, report: `${dir}/report.md` });
+    output({ ...result, profile: classification(run).current, telemetry: telemetry(run), report: `${dir}/report.md` });
     return result.status === 'VERIFIED' ? 0 : result.status === 'FAILED' ? 1 : result.status === 'BLOCKED' ? 3 : 2;
   });
 }

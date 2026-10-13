@@ -4,6 +4,7 @@ import { basename, join, relative, resolve } from 'node:path';
 import { boundedRead, clean, hash, inside, noLinks, projectFile } from './safety.js';
 import { gitEvidence, snapshot } from './snapshot.js';
 import { detect } from './detect.js';
+import { classify, classification } from './adaptive.js';
 import type { Artifact, Mode, Run } from './types.js';
 
 export async function save(runDir: string, run: Run): Promise<void> {
@@ -40,6 +41,7 @@ export async function init(rootPath: string, mode: Mode, summary: string, oracle
     baseline, oracles, regressions: [...new Set(regressions)], commands: [], artifacts: [], notes: [], confirmations: [],
     detection: await detect(root, Object.keys(baseline.files)),
   };
+  run.classification = classify(run);
   await addArtifact(dir, run, clean(gitEvidence(root)), 'baseline-git', 'txt');
   await save(dir, run);
   return dir;
@@ -58,6 +60,11 @@ export async function load(runPath: string): Promise<{ dir: string; run: Run }> 
     || !run.baseline?.files || typeof run.baseline.digest !== 'string'
     || run.baseline.digest !== hash(JSON.stringify(run.baseline.files))) throw new Error('Invalid RepFix run manifest');
   if (join(await realpath(run.root), '.repfix', run.id) !== dir) throw new Error('Run is outside its original project');
+  if (run.classification && (!['FAST', 'STANDARD', 'DEEP'].includes(run.classification.selected)
+    || !['FAST', 'STANDARD', 'DEEP'].includes(run.classification.current)
+    || !Array.isArray(run.classification.reasons) || !Array.isArray(run.classification.uncertainty)
+    || !Array.isArray(run.classification.escalations))) throw new Error('Invalid adaptive classification record');
+  classification(run); // Older version-1 sessions remain readable.
   for (const a of run.artifacts) {
     if (!/^a\d+$/.test(a.id) || !/^a\d+\.[a-z0-9]+$/.test(a.file) || !/^[a-f0-9]{64}$/.test(a.sha256)) throw new Error('Invalid artifact record');
   }

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { clean, noLinks, testFile } from './safety.js';
 import { changed, gitEvidence, snapshot } from './snapshot.js';
 import { integrity } from './store.js';
+import { classification, telemetry } from './adaptive.js';
 import type { Assessment, Command, Run, Snapshot } from './types.js';
 
 const passed = (c: Command): boolean => c.exitCode === 0 && !c.error && !c.evidenceIssue && !c.signal && !c.timedOut && !c.interrupted && !c.truncated && c.before === c.after;
@@ -21,6 +22,9 @@ export function assess(run: Run, current: Snapshot, broken: string[] = [], block
   const checks = active.filter(c => c.phase !== 'reproduce');
   if (checks.some(c => !blocked(c) && c.exitCode !== 0)) return result('FAILED', 'A current verification or regression command failed.');
   if (active.some(blocked)) return result('BLOCKED', 'A current command could not complete (spawn, timeout, signal, or interruption).');
+  if (active.some(c => c.phase === 'reproduce' && c.evidenceIssue?.startsWith('A required module is unavailable'))) {
+    return result('BLOCKED', 'A reproduction dependency is unavailable; restore the reviewed environment and rerun the original scenario.');
+  }
   if (run.mode === 'diagnose-only') return result('UNVERIFIED', 'Diagnosis only; no fix was applied or verified.');
   const verifications = run.commands.filter(c => c.phase === 'verify');
   const verification = verifications.at(-1);
@@ -42,9 +46,11 @@ export function assess(run: Run, current: Snapshot, broken: string[] = [], block
     }
   }
   if (!run.regressions.length) reasons.push('No regression checks were declared.');
+  const lastMaterialEscalation = classification(run).escalations.filter(e => ['additional-components', 'security-or-data-integrity', 'unstable-tests', 'unexpected-test-failure'].includes(e.event)).at(-1);
   for (const name of run.regressions) {
     const c = latest.get(`regression:${name}`);
-    if (!c || !passed(c) || c.after !== current.digest || run.commands.indexOf(c) < run.commands.indexOf(verification)) {
+    if (!c || !passed(c) || c.after !== current.digest || run.commands.indexOf(c) < run.commands.indexOf(verification)
+      || lastMaterialEscalation && run.commands.indexOf(c) < lastMaterialEscalation.afterCommand) {
       reasons.push(`Regression ${name} has not passed on the final project state after verification.`);
     }
   }
@@ -63,9 +69,16 @@ export async function report(dir: string, run: Run, blocker?: string): Promise<A
   const assessment: Assessment = current
     ? assess(run, current, await integrity(dir, run), blocker)
     : { status: 'BLOCKED', reasons: [snapshotError], changedFiles: [] };
+  const metrics = telemetry(run);
   const lines = [
-    '# RepFix report', '', `**${assessment.status}** · ${run.mode} · ${run.id}`, '', cell(run.summary), '',
+    '# RepFix report', '', `**${assessment.status}** · ${run.mode} · ${metrics.currentProfile} · ${run.id}`, '', cell(run.summary), '',
     '## Result', '', ...assessment.reasons.map(reason => `- ${cell(reason)}`), '',
+    '## Adaptive verification', '',
+    `Profile: ${metrics.selectedProfile} selected, ${metrics.currentProfile} current. Confidence: ${metrics.confidence}.`,
+    ...metrics.classificationReasons.map(reason => `- ${cell(reason)}`),
+    ...metrics.uncertainty.map(reason => `- Uncertainty: ${cell(reason)}`),
+    ...metrics.escalationEvents.map(event => `- Escalated ${event.from} → ${event.to}: ${cell(event.event)} — ${cell(event.reason)}`),
+    `Elapsed: ${metrics.totalDurationMs}ms; recorded commands: ${metrics.toolExecutionCount}; command time: reproduce ${metrics.phaseDurationsMs.reproduce}ms, verify ${metrics.phaseDurationsMs.verify}ms, regression ${metrics.phaseDurationsMs.regression}ms; host/other ${metrics.phaseDurationsMs.other}ms.`, '',
     ...(run.detection ? ['## Project', '', `Languages: ${cell(run.detection.languages.join(', ') || 'unknown')}. Frameworks: ${cell(run.detection.frameworks.join(', ') || 'none detected')}. Test runners: ${cell(run.detection.testRunners.join(', ') || 'unknown')}.`, ''] : []),
     '## Findings', '', ...run.notes.map(n => `- **${n.kind}**: ${cell(n.text)}${n.evidence.length ? ` (evidence: ${n.evidence.join(', ')})` : ''}`), '',
     '## Failure confirmation', '', ...run.confirmations.map(c => `- ${c.command}: ${cell(c.reason)}`), '',
@@ -83,7 +96,7 @@ export async function report(dir: string, run: Run, blocker?: string): Promise<A
   ];
   for (const name of ['report.md', 'report.json', 'final-git.txt']) await noLinks(join(dir, name));
   await writeFile(join(dir, 'report.md'), lines.join('\n'), { mode: 0o600 });
-  await writeFile(join(dir, 'report.json'), JSON.stringify({ ...assessment, mode: run.mode, run: run.id, generatedAt: new Date().toISOString(), detection: run.detection, commands: run.commands, notes: run.notes, artifacts: run.artifacts }, null, 2) + '\n', { mode: 0o600 });
+  await writeFile(join(dir, 'report.json'), JSON.stringify({ ...assessment, mode: run.mode, run: run.id, generatedAt: new Date().toISOString(), telemetry: metrics, detection: run.detection, commands: run.commands, notes: run.notes, artifacts: run.artifacts }, null, 2) + '\n', { mode: 0o600 });
   await writeFile(join(dir, 'final-git.txt'), clean(gitEvidence(run.root)), { mode: 0o600 });
   return assessment;
 }
