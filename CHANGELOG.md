@@ -2,6 +2,14 @@
 
 Release PRs update this file using Conventional Commits. An entry is not proof of publication; see GitHub Releases and npm for published versions.
 
+## [0.2.0](https://github.com/xkyota/RepFix/compare/v0.1.3...v0.2.0) (2026-10-13)
+
+
+### Features
+
+* add adaptive verification profiles and telemetry ([#15](https://github.com/xkyota/RepFix/issues/15)) ([c22654a](https://github.com/xkyota/RepFix/commit/c22654afe15d1795ffb34d1edc9847c40e1c9b93))
+* make adaptive verification usable in agent sessions ([fa34c37](https://github.com/xkyota/RepFix/commit/fa34c376b099cc6940faf3e0d235e1ee8f812f84))
+
 ## [0.1.3](https://github.com/xkyota/RepFix/compare/v0.1.2...v0.1.3) (2026-10-10)
 
 
